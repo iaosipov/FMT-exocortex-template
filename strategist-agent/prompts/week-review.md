@@ -12,6 +12,15 @@
 
 ## Алгоритм
 
+### 0. WakaTime — статистика рабочего времени
+
+> Данные автоматически подставляются из WakaTime API (см. `{{WAKATIME_WEEK}}`).
+> Включи секцию WakaTime в WeekReport после метрик и в пост для клуба.
+> Сравни текущую и предыдущую неделю — укажи тренд (рост/спад/стабильно).
+> Если данных нет — напиши: «WakaTime: нет данных (трекинг активен с 23 фев 2026)».
+
+{{WAKATIME_WEEK}}
+
 ### 1. Сбор данных (Стратег собирает сам)
 
 ```bash
@@ -50,6 +59,38 @@ git -C {{WORKSPACE_DIR}}/<repo> log --since="last monday 00:00" --until="today 0
 1. Создай `current/WeekReport W{N} YYYY-MM-DD.md`
 2. Закоммить в DS-strategy
 
+### 6. Создать пост для клуба (авто-публикация)
+
+> Пост итогов недели публикуется автоматически в Пн 06:00 МСК. Стратег создаёт его сразу со `status: ready`.
+
+1. На основе WeekReport сформируй пост для клуба:
+   - Формат: по правилам `{{WORKSPACE_DIR}}/DS-Knowledge-Index-Tseren/CLAUDE.md` § 3 (аудитория `community`)
+   - Структура: компактный отчёт (метрики, ключевые результаты, инсайты, что дальше)
+   - Название: стандарт отчётов — `{Главное достижение}: W{N}, DD мес YYYY`
+   - Выбери лучшее название сам (в автоматическом режиме нет пользователя для выбора)
+   - Финал поста — сдержанный (см. CLAUDE.md § 3, правило сдержанности)
+
+2. Создай файл `{{WORKSPACE_DIR}}/DS-Knowledge-Index-Tseren/docs/{YYYY}/{YYYY-MM-DD}-week-review-w{N}.md`
+
+3. Frontmatter:
+
+```yaml
+---
+type: post
+title: "..."
+audience: community
+status: ready
+created: YYYY-MM-DD
+target: club
+source_knowledge: null
+tags: [итоги-недели, W{N}]
+content_plan: null
+---
+```
+
+4. Обнови `{{WORKSPACE_DIR}}/DS-Knowledge-Index-Tseren/docs/README.md` — добавь строку в начало текущего месяца
+5. Закоммить и запушь `DS-Knowledge-Index-Tseren` (git add docs/ && git commit && git push)
+
 **Шаблон WeekReport:**
 
 ```markdown
@@ -67,6 +108,7 @@ agent: Стратег
 - **РП:** X/Y завершено (N%)
 - **Коммитов:** N в M репо
 - **Активных дней:** N/7
+- **WakaTime:** [общее время за неделю] (vs предыдущая: [время])
 
 ## По репозиториям
 
@@ -91,4 +133,6 @@ agent: Стратег
 *Создан: YYYY-MM-DD (Week Review)*
 ```
 
-Результат: WeekReport в `current/` — для клуба и как вход для session-prep.
+Результат:
+- WeekReport в `current/` — как вход для session-prep
+- Пост итогов в `DS-Knowledge-Index-Tseren/docs/{YYYY}/` со `status: ready` — авто-публикация Пн 06:00

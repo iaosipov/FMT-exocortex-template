@@ -35,7 +35,17 @@ notify() {
 
 notify_telegram() {
     local scenario="$1"
-    "$HOME/Github/DS-synchronizer/scripts/notify.sh" strategist "$scenario" >> "$LOG_FILE" 2>&1 || true
+    "$HOME/Github/DS-IT-systems/DS-ai-systems/synchronizer/scripts/notify.sh" strategist "$scenario" >> "$LOG_FILE" 2>&1 || true
+}
+
+fetch_wakatime_data() {
+    local mode="$1"  # "day" or "week"
+    local fetch_script="$SCRIPT_DIR/fetch-wakatime.sh"
+    if [ -x "$fetch_script" ]; then
+        "$fetch_script" "$mode" 2>/dev/null || echo "(WakaTime данные недоступны)"
+    else
+        echo "(fetch-wakatime.sh не найден)"
+    fi
 }
 
 run_claude() {
@@ -50,6 +60,20 @@ run_claude() {
     # Читаем содержимое команды
     local prompt
     prompt=$(cat "$command_path")
+
+    # Подставляем WakaTime данные в промпт (если есть плейсхолдеры)
+    if echo "$prompt" | grep -q '{{WAKATIME_DAY}}'; then
+        log "Fetching WakaTime data (day mode)"
+        local waka_day
+        waka_day=$(fetch_wakatime_data "day")
+        prompt="${prompt//\{\{WAKATIME_DAY\}\}/$waka_day}"
+    fi
+    if echo "$prompt" | grep -q '{{WAKATIME_WEEK}}'; then
+        log "Fetching WakaTime data (week mode)"
+        local waka_week
+        waka_week=$(fetch_wakatime_data "week")
+        prompt="${prompt//\{\{WAKATIME_WEEK\}\}/$waka_week}"
+    fi
 
     log "Starting scenario: $command_file"
     log "Command file: $command_path"
@@ -123,6 +147,11 @@ case "$1" in
     "week-review")
         log "Sunday: running week review"
         run_claude "week-review"
+        # Fallback push for Knowledge Index (week-review creates a post there)
+        KI_REPO="$HOME/Github/DS-Knowledge-Index-Tseren"
+        if git -C "$KI_REPO" log --oneline -1 --since="1 hour ago" --grep="week-review" 2>/dev/null | grep -q .; then
+            git -C "$KI_REPO" push >> "$LOG_FILE" 2>&1 && log "Pushed Knowledge Index (fallback)" || log "WARN: KI push failed"
+        fi
         notify_telegram "week-review"
         ;;
     "session-prep")
@@ -137,7 +166,30 @@ case "$1" in
         ;;
     "note-review")
         log "Evening: running note review"
+        # Canary: count bold notes before
+        FLEETING="$WORKSPACE/inbox/fleeting-notes.md"
+        BOLD_BEFORE=$(grep -c '^\*\*' "$FLEETING" 2>/dev/null || echo 0)
+        log "Canary: $BOLD_BEFORE bold notes before note-review"
+
         run_claude "note-review"
+
+        # Canary: count bold notes after — if same or more, Step 10 likely failed
+        BOLD_AFTER=$(grep -c '^\*\*' "$FLEETING" 2>/dev/null || echo 0)
+        log "Canary: $BOLD_AFTER bold notes after note-review (was $BOLD_BEFORE)"
+        if [ "$BOLD_AFTER" -ge "$BOLD_BEFORE" ] && [ "$BOLD_BEFORE" -gt 0 ]; then
+            log "WARN: Note-Review Step 10 may have failed — bold notes did not decrease ($BOLD_BEFORE → $BOLD_AFTER)"
+            # Direct TG alert (bypass notify.sh templates)
+            ENV_FILE="$HOME/.config/aist/env"
+            if [ -f "$ENV_FILE" ]; then
+                set -a; source "$ENV_FILE"; set +a
+                ALERT_TEXT="⚠️ <b>Note-Review canary</b>: Step 10 не сработал ($BOLD_BEFORE → $BOLD_AFTER bold notes). Проверь логи: ~/logs/strategist/"
+                ALERT_JSON=$(printf '%s' "$ALERT_TEXT" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
+                curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                    -H "Content-Type: application/json" \
+                    -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":${ALERT_JSON},\"parse_mode\":\"HTML\"}" >> "$LOG_FILE" 2>&1 || true
+            fi
+        fi
+
         notify_telegram "note-review"
         ;;
     "day-close")
