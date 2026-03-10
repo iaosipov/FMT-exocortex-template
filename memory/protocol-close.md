@@ -75,6 +75,7 @@
 
 ## Чеклист Close
 
+- [ ] **Session log:** удалить строку этой сессии из `DS-strategy/inbox/open-sessions.log`
 - [ ] Все изменения закоммичены и запушены
 - [ ] MEMORY.md обновлён (статусы РП)
 - [ ] DS-my-strategy/current/Plan обновлён
