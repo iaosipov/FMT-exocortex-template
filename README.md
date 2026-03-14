@@ -236,7 +236,8 @@ FMT-exocortex-template/
 │   ├── fpf-reference.md             # Первые принципы (FPF)
 │   ├── checklists.md                # Чеклисты
 │   ├── sota-reference.md            # SOTA-практики
-│   └── repo-type-rules.md           # Правила по типам репозиториев
+│   ├── repo-type-rules.md           # Правила по типам репозиториев
+│   └── day-rhythm-config.yaml       # Ритм дня: помидорки, новости, стратег-день
 │
 ├── docs/                            # Справочная документация
 │   ├── SETUP-GUIDE.md               # Пошаговое руководство установки
@@ -253,6 +254,13 @@ FMT-exocortex-template/
 │   │   └── scripts/                 # Скрипты запуска + launchd plist
 │   ├── extractor/                   # Роль: Экстрактор знаний (R2)
 │   └── synchronizer/                # Роль: Синхронизатор (R8)
+│
+├── setup/                           # Утилиты установки
+│   ├── validate-template.sh         # Проверка плейсхолдеров
+│   └── optional/                    # Опциональные компоненты
+│       ├── README.md                # Документация (установка, настройка)
+│       ├── pomodoro-alert.py        # Помодоро-напоминания (WakaTime + macOS)
+│       └── pomodoro-alert.plist     # launchd агент для помодоро
 │
 ├── seed/                            # Шаблоны → отдельные репо после setup
 │   └── strategy/                    # → DS-strategy/ (стратегический хаб)
