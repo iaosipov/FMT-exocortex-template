@@ -5,6 +5,14 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.8.6] — 2026-03-17
+
+### Added
+- **Роли верификации (R23-R24)** — skill /verify + hard-distinctions #38-40 (WP-122)
+- **Governance-синхронизация** в Day Close — проверка REPOSITORY-REGISTRY, navigation.md, MAP.002↔PROCESSES.md (WP-124)
+- **Collapsible sections** в LEARNING-PATH и SETUP-GUIDE (details/summary)
+- **Онбординг** переработан: пользователь в центре, принципы двусторонние
+
 ## [0.8.5] — 2026-03-17
 
 ### Added
