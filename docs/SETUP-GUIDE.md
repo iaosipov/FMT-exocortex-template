@@ -505,28 +505,57 @@ video:
 
 </details>
 <details>
-<summary><b>Автоматическое пробуждение Mac (рекомендуется)</b></summary>
+<summary><b>Автоматическое пробуждение и предотвращение сна</b></summary>
 
-По умолчанию Стратег запускается по расписанию launchd. Но если Mac спит (крышка закрыта ночью), launchd ждёт пробуждения. Это значит: открываешь крышку в 8:00 → план появляется через 15-20 мин.
+Агенты запускаются по расписанию. Если ноутбук спит — задачи ждут пробуждения. Настрой автоматический wake, чтобы план был готов до твоего пробуждения.
 
-Чтобы план был готов **до** пробуждения, настрой автоматический wake:
+**macOS:**
 
 ```bash
-# Проверить текущее расписание
-pmset -g sched
-
-# Установить пробуждение в 3:55 ежедневно (за 5 мин до Стратега)
-# Требует пароль администратора. Mac должен быть подключён к питанию.
+# Пробуждение в 3:55 ежедневно (за 5 мин до Стратега)
 sudo pmset repeat wakeorpoweron MTWRFSU 03:55:00
+
+# ВАЖНО: если ноутбук на зарядке, Optimized Battery Charging может
+# переключить профиль питания на «батарея». На батарейном профиле
+# Mac засыпает даже при подключённом кабеле. Решение:
+sudo pmset -b sleep 0      # не засыпать на батарейном профиле
+sudo pmset -b standby 0    # не уходить в deep standby
+
+# Проверить: pmset -g custom (sleep=0 в обоих профилях)
+# Отменить wake: sudo pmset repeat cancel
+# Вернуть sleep: sudo pmset -b sleep 1 && sudo pmset -b standby 1
 ```
 
-> **Как это работает:** Mac просыпается в 3:55, launchd запускает scheduler в 4:00, план готов к ~4:20. Ты встаёшь — план уже есть.
+> **Как это работает:** Mac просыпается в 3:55, scheduler запускается в 4:00, план готов к ~4:20. Скрипты автоматически держат Mac бодрым через `caffeinate -diu` (работает и на батарейном профиле).
 >
-> **Без питания:** `wakeorpoweron` работает только при подключённом питании. Если Mac на батарее — план создастся при открытии крышки (задержка ~15-20 мин).
->
-> **Отменить:** `sudo pmset repeat cancel`
->
-> **Linux:** Используй `rtcwake` или systemd timer с `WakeSystem=true`.
+> **Charge Limit (рекомендуется):** вместо Optimized Battery Charging включи фиксированный лимит (System Settings → Battery → Charge Limit → 80%). Защищает батарею без непредсказуемых переключений профиля.
+
+**Linux:**
+
+```bash
+# Пробуждение через rtcwake (одноразовое, обычно в cron)
+sudo rtcwake -m no -t $(date -d "tomorrow 03:55" +%s)
+
+# Или systemd timer (постоянное расписание)
+# /etc/systemd/system/exocortex-wake.timer
+# [Timer]
+# OnCalendar=*-*-* 03:55:00
+# WakeSystem=true
+# Persistent=true
+
+# Предотвращение сна (скрипты делают это автоматически через systemd-inhibit)
+# Ручная проверка: systemd-inhibit --list
+```
+
+**Windows (WSL):**
+
+```powershell
+# Пробуждение через Task Scheduler
+schtasks /create /tn "ExocortexWake" /tr "wsl ~/IWE/DS-IT-systems/DS-ai-systems/synchronizer/scripts/scheduler.sh dispatch" /sc daily /st 04:00
+# Предотвращение сна: powercfg /change standby-timeout-ac 0
+```
+
+> **Общее правило:** скрипты `strategist.sh` и `scheduler.sh` автоматически предотвращают сон на время работы (macOS: `caffeinate -diu`, Linux: `systemd-inhibit`). Настроить нужно только **пробуждение** и **запрет засыпания на уровне ОС** для ноутбуков.
 
 </details>
 <details>
