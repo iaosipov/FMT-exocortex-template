@@ -5,6 +5,16 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.18.1] — 2026-03-29
+
+### Added
+- **Budget Spread** — Day Open автоматически распределяет недельный бюджет РП по оставшимся дням. Для РП с бюджетом ≥ `threshold_h` (default: 4h): `daily_slot = round(budget_week / days_left, 0.5h)`. Carry-over защищён: берётся `max(carry_over, daily_slot)`. Настройки в `memory/day-rhythm-config.yaml → budget_spread`
+
+### Changed
+- **day-rhythm-config.yaml** — новая секция `budget_spread` (enabled/threshold_h/rounding)
+- **day-open/SKILL.md** — шаг 2 WeekPlan дополнен правилом Budget Spread
+- **extensions/README.md** — раздел «Конфиг Day Open» с документацией параметров
+
 ## [0.18.0] — 2026-03-28
 
 ### Added
