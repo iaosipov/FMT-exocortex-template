@@ -61,9 +61,7 @@ notify() {
 
 notify_telegram() {
     local scenario="$1"
-    local NOTIFY_SCRIPT
-    NOTIFY_SCRIPT="$(dirname "$REPO_DIR")/synchronizer/scripts/notify.sh"
-    "$NOTIFY_SCRIPT" strategist "$scenario" >> "$LOG_FILE" 2>&1 || true
+    "$HOME/IWE/DS-IT-systems/DS-ai-systems/synchronizer/scripts/notify.sh" strategist "$scenario" >> "$LOG_FILE" 2>&1 || true
 }
 
 run_claude() {
@@ -145,12 +143,19 @@ mkdir -p "$LOCK_DIR"
 acquire_lock() {
     local scenario="$1"
     local lockfile="$LOCK_DIR/${scenario}.${DATE}.lock"
-    if ! mkdir "$lockfile" 2>/dev/null; then
-        log "SKIP: $scenario already running (lock exists: $lockfile)"
-        exit 2  # non-zero → scheduler won't mark_done
+    if [ -f "$lockfile" ]; then
+        local pid
+        pid=$(cat "$lockfile" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            log "SKIP: $scenario already running (PID $pid)"
+            exit 2  # non-zero → scheduler won't mark_done
+        else
+            log "WARN: removing stale lock (PID $pid no longer exists): $lockfile"
+            rm -f "$lockfile"
+        fi
     fi
-    # Auto-cleanup lock on exit
-    trap "rmdir '$lockfile' 2>/dev/null" EXIT
+    echo $$ > "$lockfile"
+    trap 'rm -f "$lockfile" 2>/dev/null' EXIT
 }
 
 # Читаем strategy_day из конфига (L4 Personal)
@@ -248,7 +253,7 @@ case "$1" in
 
         # Deterministic cleanup: archive non-bold, non-🔄 notes (safety net for LLM Step 10)
         log "Running deterministic cleanup..."
-        CLEANUP_OUTPUT=$(bash "$SCRIPT_DIR/cleanup-processed-notes.sh" 2>&1) || true
+        CLEANUP_OUTPUT=$(python3 "$SCRIPT_DIR/cleanup-processed-notes.py" 2>&1) || true
         log "Cleanup: $CLEANUP_OUTPUT"
 
         # If cleanup made changes, commit and push

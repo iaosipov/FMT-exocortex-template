@@ -93,6 +93,19 @@
 > Правила на обкатке. Работают → переносятся в шаблон (L1).
 > **Перенесено в L1 (20 мар):** UC Gate, межсистемные процессы, чеклист-верификация.
 
+### Staging-канал (my IWE → FMT-exocortex-template)
+
+
+**Правило добавления:** новое поведение в §9 (авторское) → ОДНОВРЕМЕННО строка в STAGING.md (`status: testing`).
+
+**Промоция (при Week Close):**
+1. Просмотреть STAGING.md → есть `validated`?
+2. Убрать авторские константы → заменить на `{{PLACEHOLDER}}`
+3. Перенести в `FMT-exocortex-template` + commit `feat: promote S-NN from staging`
+4. Обновить STAGING.md: статус → `promoted`
+
+**Отклонение:** специфичное для авторского окружения → статус `rejected` (остаётся навсегда в §9, не промотируется). Не удалять из таблицы — это решение.
+
 ---
 
 ## 9. Авторское (только мой IWE)
@@ -111,6 +124,13 @@
 
 > **DS-IT-systems/SystemsSchool_bot** — ⛔ READ-ONLY.
 > **DS-IT-systems/aisystant** — ⛔ READ-ONLY.
+
+### Extensions Gate (БЛОКИРУЮЩЕЕ)
+
+**Кастомизация протоколов/скиллов → ТОЛЬКО в `extensions/*.md`.**
+Прямое редактирование `.claude/skills/` или `memory/protocol-*.md` = ошибка: сотрётся при `update.sh`.
+Авторское → `extensions/`. Платформенное → `FMT-exocortex-template`, затем `update.sh`.
+
 
 ### README.md (FMT-exocortex-template)
 
