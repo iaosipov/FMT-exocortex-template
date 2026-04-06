@@ -61,7 +61,8 @@ notify() {
 
 notify_telegram() {
     local scenario="$1"
-    "$HOME/IWE/DS-IT-systems/DS-ai-systems/synchronizer/scripts/notify.sh" strategist "$scenario" >> "$LOG_FILE" 2>&1 || true
+    local notify_script="$REPO_DIR/../synchronizer/scripts/notify.sh"
+    [ -f "$notify_script" ] && "$notify_script" strategist "$scenario" >> "$LOG_FILE" 2>&1 || true
 }
 
 run_claude() {
@@ -216,8 +217,9 @@ case "$1" in
         log "Sunday: running week review"
         run_claude "week-review"
         # Fallback push for Knowledge Index (week-review creates a post there)
+        # KI_REPO may not exist for all users — guard with [ -d ]
         KI_REPO="$HOME/IWE/DS-Knowledge-Index"
-        if git -C "$KI_REPO" log --oneline -1 --since="1 hour ago" --grep="week-review" 2>/dev/null | grep -q .; then
+        if [ -d "$KI_REPO/.git" ] && git -C "$KI_REPO" log --oneline -1 --since="1 hour ago" --grep="week-review" 2>/dev/null | grep -q .; then
             git -C "$KI_REPO" push >> "$LOG_FILE" 2>&1 && log "Pushed Knowledge Index (fallback)" || log "WARN: KI push failed"
         fi
         notify_telegram "week-review"

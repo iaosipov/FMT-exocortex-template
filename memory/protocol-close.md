@@ -176,8 +176,8 @@ done
 #### 4. Автоматические шаги (скрипт `day-close.sh`)
 
 ```bash
-# Запуск одной командой:
-{{HOME_DIR}}/IWE/DS-IT-systems/DS-ai-systems/synchronizer/scripts/day-close.sh
+# Запуск одной коман��ой:
+{{WORKSPACE_DIR}}/FMT-exocortex-template/roles/synchronizer/scripts/day-close.sh
 ```
 
 Скрипт выполняет:

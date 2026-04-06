@@ -129,8 +129,6 @@ Temporal metadata: `valid_from: YYYY-MM-DD` (обязательно при со�
 
 ### Read-only репо
 
-> **DS-IT-systems/SystemsSchool_bot** — ⛔ READ-ONLY.
-> **DS-IT-systems/aisystant** — ⛔ READ-ONLY.
 
 ### Extensions Gate (БЛОКИРУЮЩЕЕ)
 
