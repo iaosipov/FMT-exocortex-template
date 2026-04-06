@@ -11,8 +11,7 @@ caffeinate -diu -w $$ &
 # Конфигурация
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
-GOVERNANCE_REPO="${GOVERNANCE_REPO:-DS-strategy}"
-WORKSPACE="$HOME/IWE/$GOVERNANCE_REPO"
+WORKSPACE="$HOME/IWE/DS-strategy"
 PROMPTS_DIR="$REPO_DIR/prompts"
 LOG_DIR="$HOME/logs/strategist"
 CLAUDE_PATH="{{CLAUDE_PATH}}"
@@ -62,12 +61,7 @@ notify() {
 
 notify_telegram() {
     local scenario="$1"
-    NOTIFY_SCRIPT="${NOTIFY_SCRIPT:-$HOME/IWE/DS-IT-systems/DS-ai-systems/synchronizer/scripts/notify.sh}"
-    if [ -x "$NOTIFY_SCRIPT" ]; then
-        "$NOTIFY_SCRIPT" strategist "$scenario" >> "$LOG_FILE" 2>&1 || true
-    else
-        log "SKIP: notify script not found at $NOTIFY_SCRIPT"
-    fi
+    "$HOME/IWE/DS-IT-systems/DS-ai-systems/synchronizer/scripts/notify.sh" strategist "$scenario" >> "$LOG_FILE" 2>&1 || true
 }
 
 run_claude() {
@@ -222,7 +216,7 @@ case "$1" in
         log "Sunday: running week review"
         run_claude "week-review"
         # Fallback push for Knowledge Index (week-review creates a post there)
-        KI_REPO="${KI_REPO:-$HOME/IWE/DS-Knowledge-Index}"
+        KI_REPO="$HOME/IWE/DS-Knowledge-Index"
         if git -C "$KI_REPO" log --oneline -1 --since="1 hour ago" --grep="week-review" 2>/dev/null | grep -q .; then
             git -C "$KI_REPO" push >> "$LOG_FILE" 2>&1 && log "Pushed Knowledge Index (fallback)" || log "WARN: KI push failed"
         fi
