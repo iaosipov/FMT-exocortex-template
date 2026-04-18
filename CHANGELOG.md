@@ -5,6 +5,14 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.26.4] — 2026-04-18
+
+### Added
+- **.claude/skills/ke/SKILL.md** — блок `## Scope` разграничивает три инструмента знания в IWE: `/ke` (inline capture, R14/R1), `extractor.sh inbox-check` (R2 launchd 3h work hours, создаёт `extraction-reports/*.md` со `status: pending-review`), `/apply-captures` (R15 Валидатор, в разработке). Явно указано что скилл делает и чего НЕ делает. Предотвращает будущий P10-дубликат scope при появлении `/apply-captures`. Источник: WP-247 Ф3.0 — IntegrationGate для скилла разбора extraction-reports.
+
+### Fixed
+- **roles/strategist/prompts/session-prep.md** (шаг 6, очистка `extraction-reports/`) — условие удаления учитывает `status` во frontmatter: удаляются только `applied` / `rejected` / `no-pending` (старше 7 дней). Статусы `pending-review` / `partially-applied` / `deferred` защищены — реализация инварианта «capture не исчезает без решения». Инцидент 17 апр: прежнее правило «старше 7 дней → удалить» удалило 6 pending-review отчётов (6-10 апр) вместе с неразобранными кандидатами. Источник: WP-247 Ф5.
+
 ## [0.26.3] — 2026-04-18
 
 ### Fixed
