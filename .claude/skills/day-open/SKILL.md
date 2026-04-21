@@ -160,12 +160,24 @@ agent: Стратег
 
 </details>
 <details>
-<summary><b>Здоровье бота (QA)</b></summary>
+<summary><b>Здоровье платформы</b></summary>
+
+> Агрегированная секция: бот + остальные MCP-сервисы (digital-twin, gateway, content-pipeline, knowledge-mcp) + operational health.
+
+### Бот @aist_me_bot (QA)
 
 **Дельта:** Сегодня: N (↑↓X vs вчера) | За 7д: N (↑↓X vs пред. 7д)
 
 | # | Вопрос | Sev | Cluster | Дата |
 |---|--------|-----|---------|------|
+
+### Остальные MCP-сервисы
+
+⬜ Нет AI quality отчётов / см. [WP-N](...).
+
+### Operational health
+
+⬜ Нет данных / ссылка на dashboard.
 
 </details>
 <details>
