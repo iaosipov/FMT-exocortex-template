@@ -100,6 +100,7 @@ jobs:
                   --exclude='setup.sh' 2>/dev/null \
                   | grep -v '/Users/\.\.\./' \
                   | grep -v '# .*\(/Users/\|e\.g\.\)' \
+                  | grep -v 'CHANGELOG.md' \
                   | wc -l)
           if [ "$count" -gt 0 ]; then
             echo "FAIL: Found /Users/ in $count locations:"
@@ -108,7 +109,8 @@ jobs:
                 --exclude='validate-template.sh' \
                 --exclude='setup.sh' 2>/dev/null \
                 | grep -v '/Users/\.\.\./' \
-                | grep -v '# .*\(/Users/\|e\.g\.\)' | head -5
+                | grep -v '# .*\(/Users/\|e\.g\.\)' \
+                | grep -v 'CHANGELOG.md' | head -5
             FAIL=1
           fi
 
@@ -175,6 +177,40 @@ jobs:
             echo "FAIL: setup.sh missing MCP connector instructions"
             exit 1
           fi
+
+      # 7. Hooks cross-ref: settings.json ↔ .claude/hooks/ (issue #13)
+      - name: Check hooks cross-ref
+        run: |
+          FAIL=0
+          SETTINGS_FILES=()
+          [ -f ".claude/settings.json" ] && SETTINGS_FILES+=(".claude/settings.json")
+          [ -f ".claude/settings.local.json" ] && SETTINGS_FILES+=(".claude/settings.local.json")
+
+          if [ ${#SETTINGS_FILES[@]} -eq 0 ] || [ ! -d ".claude/hooks" ]; then
+            echo "SKIP: no settings.json or hooks/ dir"
+            exit 0
+          fi
+
+          # (a) FAIL: hook referenced in settings.json but file missing
+          REFERENCED=$(grep -hoE '\.claude/hooks/[a-zA-Z0-9_-]+\.sh' "${SETTINGS_FILES[@]}" 2>/dev/null | sort -u || true)
+          for ref in $REFERENCED; do
+            if [ ! -f "$ref" ]; then
+              echo "FAIL: Missing hook $ref (referenced in settings.json but file not found)"
+              FAIL=1
+            fi
+          done
+
+          # (b) WARN: hook in dir but not referenced (may be direct-call or dead code)
+          for hook in .claude/hooks/*.sh; do
+            [ -f "$hook" ] || continue
+            name=$(basename "$hook")
+            if ! grep -q "\.claude/hooks/$name" "${SETTINGS_FILES[@]}" 2>/dev/null; then
+              echo "WARN: hook $name не упомянут в settings.json (может быть direct-call)"
+            fi
+          done
+
+          [ "$FAIL" -eq 0 ] && echo "PASS: hooks cross-ref OK"
+          exit $FAIL
 
       # 6. Smoke-test: хуки не падают на чистом пользовательском окружении.
       # Имитируем pristine user: DS-strategy вместо DS-my-strategy, DayPlan с минимальным шаблоном.
