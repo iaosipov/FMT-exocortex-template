@@ -1,6 +1,22 @@
 #!/bin/bash
 # dt-collect.sh — сбор данных активности для ЦД (WP-106, WP-139)
 #
+# ⚠️ AUTHOR-ONLY СКРИПТ — не для конечных пользователей IWE-шаблона.
+#
+# Этот скрипт пишет напрямую в БД Neon платформы через `NEON_URL` (секрет
+# автора шаблона). Доступа к production-БД у пользователей IWE нет и не
+# предусмотрено архитектурой.
+#
+# Правильный пользовательский путь записи активности в Память/ЦД —
+# MCP-инструмент `dt_write_digital_twin` в IWE Gateway (JWT подписки
+# идентифицирует пользователя, прямое подключение к БД не требуется).
+#
+# Системный переход `dt-collect` на event-gateway (POST /hub/events в
+# Activity Hub с service-token) запланирован фазой в миграционном
+# роадмапе WP-253 `DP.ROADMAP.001-neon-migration.md` и активируется
+# после Ф3 создания #2 journal (май-июль 2026). До этого момента скрипт
+# остаётся переходным артефактом автора.
+#
 # Архитектура: ядро (L3, шаблон) + плагины (L4, personal)
 #   Ядро: WakaTime, git, sessions, WP, health, multiplier, registry, Pack, notes, scheduler reports
 #   Плагины: collectors.d/*.sh — персональные коллекторы (Scout, QA бота, публикации и др.)
@@ -10,15 +26,17 @@
 #   # TARGET: 2_7_iwe | 2_8_ecosystem | 2_9_knowledge
 #   collect_name() { echo '{"key": "value"}' }
 #
-# Использование:
-#   dt-collect.sh           # собрать и записать
-#   dt-collect.sh --dry-run # показать JSON, не записывать
+# Использование (только у автора шаблона):
+#   dt-collect.sh           # собрать и записать (требует NEON_URL + DT_USER_ID)
+#   dt-collect.sh --dry-run # показать JSON, не записывать (работает без env)
 #
-# Триггер: scheduler.sh dispatch dt-collect (ежедневно, после code-scan)
-# Зависимости:
+# Триггер: scheduler.sh dispatch dt-collect — запускается только если
+# `NEON_URL` и `DT_USER_ID` присутствуют в `~/.config/aist/env` (см. guard ниже).
+#
+# Зависимости (только author-mode):
 #   WAKATIME_API_KEY  — в ~/.config/aist/env
-#   NEON_URL          — в ~/.config/aist/env (connection string)
-#   DT_USER_ID        — в ~/.config/aist/env (Ory UUID)
+#   NEON_URL          — в ~/.config/aist/env (connection string Neon, author-only)
+#   DT_USER_ID        — в ~/.config/aist/env (Ory UUID автора, author-only)
 
 set -euo pipefail
 
