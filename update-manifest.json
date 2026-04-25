@@ -1,5 +1,5 @@
 {
-  "version": "0.26.1",
+  "version": "0.28.0",
   "description": "Манифест платформенных файлов FMT-exocortex-template. Используется update.sh для доставки обновлений.",
   "files": [
     {"path": ".mcp.json", "desc": "MCP-серверы: знания через Gateway (OAuth)"},

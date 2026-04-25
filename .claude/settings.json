@@ -1,6 +1,6 @@
 {
   "permissions": {
-    "defaultMode": "dontAsk",
+    "defaultMode": "acceptEdits",
     "allow": [
       "Edit(/.claude/skills/**)",
       "mcp__google-drive__search_files",

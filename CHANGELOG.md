@@ -5,6 +5,21 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.28.0] — 2026-04-25
+
+### Changed
+- **`.claude/settings.json`** — `defaultMode` изменён с `"dontAsk"` на `"acceptEdits"`. Это исправление: `dontAsk` означает «по умолчанию **запрещать** инструменты вне allow-листа», что приводило к скрытым отказам и порождало повторные permission-запросы у пользователей. `acceptEdits` авто-аппрувит файловые операции (`Edit`/`Write`, `cp`/`mv`/`mkdir`/`touch`/`rm`/`rmdir`/`sed`) в рабочих директориях; deny-rules (`Bash(sudo *)`, `Bash(rm -rf *)`) остаются в силе. Для пользователей: меньше ненужных диалогов согласования, особенно при `update.sh`.
+- **`memory/hard-distinctions.md` HD #27** переписан: «Бот ≠ Платформа; Neon + DT MCP = один ЦД» → «Персона ≠ Память ≠ Контекст». Новая модель пользовательских данных (DP.D.052, WP-257) с критерием разделения «writer + owner»: Персона = Git пользователя, Память = Neon платформы, Контекст = runtime LLM-вызова. Маппинг старого «ЦД» на новые слои + 5 категорий вне пользовательской модели + расщепление Памяти на Observed/Derived. SoTA: Letta, Mem0, LangMem, Anthropic Memory tool.
+- **`memory/checklists.md`** — урок «MCP-индекс может вернуть stale» переформулирован с конкретной датой/документом.
+- **`memory/protocol-open.md`, `memory/repo-type-rules.md`, `memory/navigation.md`** — мелкие уточнения формулировок.
+
+### Fixed
+- **`roles/strategist/prompts/note-review.md`, `session-prep.md`, `cleanup-processed-notes.py`** — точечные правки.
+- **`roles/synchronizer/scripts/dt-collect.sh`** — упрощение (≈36 строк диффа).
+
+### Meta
+- **Drift CHANGELOG ↔ update-manifest.json** (5 версий 0.27.3-0.27.7 не имели bump манифеста, `update.sh --check` возвращал 0.26.1 как «актуальную»). Bump манифеста до 0.28.0 закрывает разрыв за один шаг. Системный фикс (pre-commit hook, не дающий закоммитить CHANGELOG без bump'а manifest) — отдельный РП, S-30 в STAGING.
+
 ## [0.27.7] — 2026-04-24
 
 ### Fixed
