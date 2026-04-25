@@ -5,6 +5,25 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.28.3] — 2026-04-25
+
+### Added
+- **`.claude/hooks/capture-bus.sh`** — диспетчер capture-механизма (DP.SC.025). Запускает enabled-детекторы последовательно на PostToolUse / Stop, передаёт stdout детектора в writer. Никогда не блокирует (exit 0 всегда). Latency-warn при >150ms.
+- **`.claude/lib/capture_writer.sh`** — writer событий: routing event_type → target_path, append в markdown/jsonl. **Параметризован** (Ф9a WP-217): `agent_incident` пишется в target_repo детектора по умолчанию (`<repo>/inbox/incident-log-YYYY-MM.md`, HD «Лог рядом с исполнителем» DP.D.049); override через опциональный `.claude/capture-config.sh` (`INCIDENT_TARGET_REPO`, `INCIDENT_REL_DIR`).
+- **`.claude/lib/log_formatter.sh`, `.claude/lib/resolve_target_repo.sh`** — зависимости writer'а.
+- **`.claude/lib/capture_selftest.sh`** — sanity-check для capture-bus.
+- **`.claude/lib/behaviour-report.sh`** — агрегатор incident-log за период (для R-вопросника Week Close: алгоритм агента «(1) запустить behaviour-report, (2) прочитать incident-log, (3) предъявить паттерны»).
+- **`.claude/config/capture-detectors.sh`** — реестр детекторов (pipe-separated). 3 активных: `incident`, `decision`, `pattern_awareness`. `permission_request` закомментирован — fail by architecture (30.7% fire / p50=1023ms на обкатке 10-25 апр), заменяется harness-гейтом `p5-stop-reminder.sh` (S-29 testing).
+- **`.claude/detectors/detector_incident.sh`** — ловит P3_structure_without_map (Write нового .md в корень репо без проверки routing-карты).
+- **`.claude/detectors/detector_decision.sh`** — ловит решения пользователя по 5 event_type (для DP.M.* decision register).
+- **`.claude/detectors/detector_pattern_awareness.sh`** — ловит P1 (write в feedback_*.md).
+- **`.claude/detectors/README.md`** — контракт интерфейса детектора (input JSON, output JSON или пусто, exit 0 всегда).
+- **`.claude/capture-config.sh.example`** — шаблон override-конфигурации.
+- **`.claude/settings.json`** — регистрация `capture-bus.sh` для PostToolUse(Edit|Write|MultiEdit) и Stop.
+
+### Changed
+- WP-217 Ф9a: `capture_writer.sh` `agent_incident` routing убрал hardcoded путь к авторскому governance-репо. Generic-поведение для пилотов: инциденты пишутся рядом с исполнителем; авторская агрегация — через локальный override-файл вне FMT-обновлений.
+
 ## [0.28.2] — 2026-04-25
 
 ### Added
