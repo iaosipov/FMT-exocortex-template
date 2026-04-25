@@ -5,6 +5,18 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.28.1] — 2026-04-25
+
+### Changed
+- **`memory/hard-distinctions.md`** — переписан: 631 → 374 строки (40% сокращение). 23 различения в порядке релевантности (Персона/Скрипт-Агент/MCP-имена/Лог-Инцидент сверху). 15 различений → `hard-distinctions_archive.md` (исторически важные, не используются в текущей работе >1 мес). 8 удалены полностью (тривиальные дубли slim distinctions.md). Для пилотов: новая компактная нумерация 1-23, прежние ссылки на номера >27 устаревают.
+- **`memory/navigation.md`** — удалена авторская таблица MCP-исходников (`DS-MCP/knowledge-mcp/...`) и ссылка на authored MCP-search. Эти пути относятся к авторскому workspace, не к шаблону.
+- **`memory/checklists.md`** — удалён давний урок про stale knowledge-mcp (фев 2026, не релевантен пилотам).
+- **`memory/protocol-open.md`, `memory/repo-type-rules.md`, `roles/strategist/scripts/cleanup-processed-notes.py`** — placeholder-sub: `DS-my-strategy` → `DS-strategy` (унификация с FMT-конвенцией).
+- **`CLAUDE.md`** — удалена строка «Бот = интерфейс / engines/tailor» в `### Различения (авторские)` §9 (специфика автора, не шаблон).
+
+### Fixed
+- **`template-sync.sh` strip-list расширен** (DS-ai-systems источник): `DS-MCP`, `knowledge-mcp`, `gateway-mcp`, `digital-twin`, `content-pipeline`, `engines/tailor` теперь вычищаются. Sync был застрял в FAILED state с ~21 апр (validation abort на этих паттернах в hard-distinctions.md HD #27 + #29). Теперь sync проходит validation.
+
 ## [0.28.0] — 2026-04-25
 
 ### Changed
