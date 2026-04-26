@@ -19,7 +19,7 @@ version: 1.1.0
 > Условный шаг: только macOS с iCloud Drive.
 
 ```bash
-{{HOME_DIR}}/IWE/scripts/backup-icloud.sh
+${IWE_SCRIPTS}/backup-icloud.sh
 ```
 
 Архив всех файлов IWE (без `.git`, `node_modules`, `.venv`) → iCloud Drive. Хранит 4 последних архива.
@@ -27,7 +27,7 @@ version: 1.1.0
 ### Скан незакоммиченных файлов
 
 ```bash
-{{HOME_DIR}}/IWE/scripts/check-dirty-repos.sh
+${IWE_SCRIPTS}/check-dirty-repos.sh
 ```
 
 Если есть грязные репо → закоммитить и запушить ДО завершения Week Close.

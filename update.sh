@@ -500,9 +500,10 @@ if [ -d "$CLAUDE_MEMORY_DIR" ]; then
     echo "  ✓ memory/MEMORY.md — не тронут"
 fi
 
-# Propagate skills, hooks, rules to workspace if changed
+# Propagate skills, hooks, rules, lib, config, detectors to workspace if changed.
+# lib/config/detectors — runtime dependencies капчер-шины (capture-bus.sh) и детекторов.
 for f in "${NEW_FILES[@]}" "${UPDATED_FILES[@]}"; do
-    case "$f" in .claude/skills/*|.claude/hooks/*|.claude/rules/*|.claude/settings.json)
+    case "$f" in .claude/skills/*|.claude/hooks/*|.claude/rules/*|.claude/lib/*|.claude/config/*|.claude/detectors/*|.claude/settings.json)
         src="$SCRIPT_DIR/$f"
         dst="$WORKSPACE_DIR/$f"
         mkdir -p "$(dirname "$dst")"
