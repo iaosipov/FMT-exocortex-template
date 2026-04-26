@@ -1,6 +1,6 @@
 ---
 name: audit-installation
-description: Аудит пользовательской инсталляции IWE. Запускает scripts/iwe-audit.sh + MCP healthcheck, передаёт отчёт subagent'у в роли VR.R.002 Аудитор (context isolation) → verdict ✅/⚠️/❌ по 5 компонентам (Inventory, L1 drift, DS-strategy, L3 customizations, MCP). Используй после restore из бэкапа, после update.sh, или при еженедельной сверке.
+description: Аудит пользовательской инсталляции IWE. Запускает scripts/iwe-audit.sh + MCP healthcheck + smoke-test ритуала через sentinel-механику (контракт dry-run-contract.md), передаёт отчёт subagent'у в роли VR.R.002 Аудитор (context isolation) → verdict ✅/⚠️/❌ по 6 компонентам (Inventory, L1 drift, DS-strategy, L3 customizations, MCP, ритуал). Используй после restore из бэкапа, после update.sh, или при еженедельной сверке.
 argument-hint: "[--skip-mcp] [--critical]"
 ---
 
@@ -14,14 +14,13 @@ argument-hint: "[--skip-mcp] [--critical]"
 
 ## Обещание
 
-За ≤5 минут — markdown-отчёт ✅/⚠️/❌ по 5 компонентам инсталляции:
+За ≤5 минут — markdown-отчёт ✅/⚠️/❌ по 6 компонентам инсталляции:
 1. **Inventory** — все ли критичные L1-файлы (CLAUDE.md, скиллы, протоколы) на месте
 2. **L1 drift** — расхождения с FMT-exocortex-template
 3. **DS-strategy** — git status + diff с FMT-strategy-template
 4. **L3 customizations** — extensions/, отличия params.yaml от skeleton, AUTHOR-ONLY зоны
 5. **MCP healthcheck** — 4 tools отвечают (с уважением к подписочному гейтингу DP.SC.112)
-
-Ритуалы (smoke-test `/day-open`, `/day-close`) — отложены до dry-run mode в самих скиллах; сейчас покрываются через Inventory check (наличие SKILL.md + protocol-*.md).
+6. **Ритуал smoke-test** — `/run-protocol close day` запускается под sentinel-защитой, доходит до write-шагов (см. `memory/dry-run-contract.md`)
 
 Verdict выносит subagent в роли Аудитора, читая отчёт **без знаний о текущей сессии** (context isolation).
 
@@ -63,6 +62,59 @@ Coverage: N/4
 ```
 
 Если `--skip-mcp` → секция «⏸️ MCP healthcheck — пропущен по флагу».
+
+## Шаг 2.5. Smoke-test ритуала (sentinel + subagent)
+
+> **Контракт:** [memory/dry-run-contract.md](../../../memory/dry-run-contract.md). Защита через sentinel-файл + PreToolUse-хук `dry-run-gate.sh`.
+
+### Алгоритм
+
+1. **Получить SESSION_ID:**
+   ```bash
+   SID="${CLAUDE_SESSION_ID:-$(uuidgen 2>/dev/null || date +%s%N)}"
+   ```
+2. **Создать sentinel:**
+   ```bash
+   echo "{\"created_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"session_id\":\"$SID\",\"initiator\":\"audit-installation\"}" > /tmp/iwe-dry-run-${SID}.flag
+   ```
+3. **Запустить subagent** через Agent tool (subagent_type=general-purpose, модель Sonnet) с промптом:
+
+   ```
+   Запусти ритуал /run-protocol close day по обычной процедуре. Не изобретай — следуй SKILL.md как написано.
+
+   ВАЖНО: в текущем окружении активен sentinel /tmp/iwe-dry-run-${SID}.flag — это означает dry-run mode.
+   PreToolUse-хук dry-run-gate.sh заблокирует любой write-tool (Write/Edit/git-write/MCP-write).
+   Это ожидаемо — твоя задача дойти максимально далеко, фиксируя на каком шаге упёрся.
+
+   После прогона отчитайся в формате:
+   ## Smoke-test /run-protocol close day
+   - Шагов выполнено: N из M
+   - Упёрлось на: <шаг>: <tool>: <причина блокировки>
+   - Read-логика: ✅ работает / ❌ упало раньше write-шага
+   - Заключение: ✅/⚠️/❌
+   ```
+
+4. **Дождаться завершения subagent'а.**
+5. **Очистить sentinel:**
+   ```bash
+   rm -f /tmp/iwe-dry-run-${SID}.flag
+   ```
+6. **Сформировать секцию 6 отчёта:**
+   ```markdown
+   ## 6. Ритуал smoke-test (/run-protocol close day)
+
+   <вывод subagent'а>
+
+   **Интерпретация:**
+   - Block на write-шаге после успешных read-шагов → ✅ (read-логика работает, это ожидаемое поведение smoke-теста)
+   - Block на шаге 1-2 → ❌ (ритуал ломается рано — нет source-файла, MCP отвалился)
+   - Все шаги без block → ⚠️ (подозрительно — ритуал должен иметь write-шаги)
+   - Hook-error → ❌ (инфраструктура поломана)
+   ```
+
+### Защита от sticky-sentinel
+
+Если subagent упал/завис → попытаться удалить sentinel явно (всегда). TTL 10 мин в самом хуке защищает от случаев, когда даже это не отработало (kill -9, краш CLI).
 
 ## Шаг 3. Сборка единого отчёта
 
@@ -135,6 +187,7 @@ Coverage: N/4
 
 ## Ограничения текущей реализации
 
-- **Smoke-test ритуалов в реальном dry-run** — отложен. Сейчас inventory check (наличие SKILL.md). Реальный запуск `/day-open --dry-run` потребует флага в самих скиллах — отдельный РП.
-- **DS-strategy diff** — работает только если существует `FMT-strategy-template`. Если нет — секция пометится «N/A».
+- **Smoke-test покрывает один ритуал** (`/run-protocol close day`). Расширение на week-close / month-close — мини-РП, копия шага 2.5 с другими subcommand'ами.
+- **DS-strategy diff** — работает только если существует `FMT-strategy-template/` (или `templates/strategy-skeleton/`). Если нет — секция пометится «N/A».
 - **MCP healthcheck** — зависит от текущих доступных tools. Если набор изменится, обновить шаг 2.
+- **Sentinel sticky-state** — защита: TTL 10 мин в хуке + Stop-cleanup. Edge case: если хук изменён и не читает sentinel → блокировки не будет (fail-open). Защита: периодический re-test `/audit-installation` ловит регрессию.
