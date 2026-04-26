@@ -5,6 +5,17 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.28.6] — 2026-04-26
+
+### Fixed (red-team Евгения round 2: 1 release-blocker + 2 edge-cases)
+
+- **C1 — `.github/workflows/validate-template.yml`** — release-blocker: CI был red на 7fbee95, потому что inline blacklist в CI расходился с локальным `setup/validate-template.sh` (CI добавил `roles/` в PROTOCOL_PATHS и ловил conditional refs `DS-agent-workspace/scheduler` в `roles/strategist/prompts/{session-prep,note-review}.md`). Теперь CI делегирует author-specific / hardcoded-paths / MEMORY-skeleton / required-files / hooks-cross-ref в `bash setup/validate-template.sh "$PWD"` (source-of-truth). CI-only остаются: smoke-test протокольных хуков, MCP doc check, placeholders check, shellcheck, release-sync.
+- **C2 — `setup/validate-template.sh`** — default аргумент изменён с `$HOME/IWE/FMT-exocortex-template` (author-specific) на `dirname $0/..` (parent dir самого скрипта). Теперь `bash setup/validate-template.sh` (без аргумента) работает на любом checkout — CI, fresh clone, не-author-инсталляция.
+- **C3 — `scripts/migrate-initial-marker.sh` (новый) + `update.sh`** — для пользователей со старым clone (до 0.28.5): их `Strategy.md` создан seed'ом, но без маркера `IWE-INITIAL-NEEDED`. После update до 0.28.5 skill `/strategy-session` уходит в weekly mode даже для day-0 пользователя. Скрипт-мигратор: эвристически распознаёт seed-скелет (placeholder `YYYY-MM-DD` в frontmatter), безопасно вставляет маркер после frontmatter, idempotent (повторный запуск ничего не делает). `update.sh` показывает hint при обнаружении такой ситуации, авто-миграцию НЕ запускает (риск изменить пользовательский файл без согласия).
+
+### Why
+Round 2 red-team Евгения после 0.28.5: runtime blockers закрыты, но release-blocker — GitHub Actions Validate Template red на 7fbee95. Корень — расхождение source-of-truth между CI inline и локальным валидатором. Симптом: оба валидатора проходят локально, но CI падает на разных правилах. Фикс по принципу single-source-of-truth: один валидатор, два места исполнения (local + CI). Edge-cases C2/C3 закрыты тем же коммитом — мелкие, но ломают UX отдельных сценариев.
+
 ## [0.28.5] — 2026-04-26
 
 ### Fixed (red-team Евгения, 10 blockers B1-B10)

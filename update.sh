@@ -699,6 +699,24 @@ else
     echo "  Нет изменений для коммита"
 fi
 
+# === Step 7.5: Migration hint — initial-marker для old clones (0.28.5+) ===
+# Если у пользователя есть Strategy.md без маркера IWE-INITIAL-NEEDED — намекнуть.
+# Это для пользователей, склонировавших до 0.28.5 (skeleton-marker появился в 0.28.5).
+ENV_FILE="$SCRIPT_DIR/.exocortex.env"
+if [ -f "$ENV_FILE" ]; then
+    ENV_WS=$(grep -E '^WORKSPACE_DIR=' "$ENV_FILE" | head -1 | cut -d= -f2-)
+    ENV_GOV=$(grep -E '^GOVERNANCE_REPO=' "$ENV_FILE" | head -1 | cut -d= -f2-)
+    USER_STRATEGY="${ENV_WS:-}/${ENV_GOV:-DS-strategy}/docs/Strategy.md"
+    if [ -f "$USER_STRATEGY" ] && ! grep -qF 'IWE-INITIAL-NEEDED' "$USER_STRATEGY"; then
+        if grep -qE '^created: YYYY-MM-DD$|^updated: YYYY-MM-DD$' "$USER_STRATEGY" 2>/dev/null; then
+            echo ""
+            echo "⚠ Strategy.md выглядит как seed-скелет, но без маркера IWE-INITIAL-NEEDED (0.28.5+)."
+            echo "  Чтобы /strategy-session корректно ушёл в initial flow, добавьте маркер:"
+            echo "    bash $SCRIPT_DIR/scripts/migrate-initial-marker.sh"
+        fi
+    fi
+fi
+
 # === Done ===
 echo ""
 echo "=========================================="

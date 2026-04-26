@@ -1,5 +1,5 @@
 {
-  "version": "0.28.5",
+  "version": "0.28.6",
   "description": "Манифест платформенных файлов FMT-exocortex-template. Используется update.sh для доставки обновлений.",
   "files": [
     {"path": ".claude.md.base"},
@@ -159,6 +159,7 @@
     {"path": "scripts/iwe-drift-helpers/check-arch-version.sh"},
     {"path": "scripts/iwe-drift-helpers/check-status-legend.sh"},
     {"path": "scripts/iwe-drift.sh"},
+    {"path": "scripts/migrate-initial-marker.sh"},
     {"path": "setup.sh"},
     {"path": "setup/optional/COVER-IMAGES.md"},
     {"path": "setup/optional/README.md"},
