@@ -107,6 +107,12 @@ if [ -n "${IWE_GOVERNANCE_REPO:-}" ] && [ -d "$IWE_ROOT/$IWE_GOVERNANCE_REPO/inb
     DOWNSTREAM_DIRS+=("$IWE_ROOT/$IWE_GOVERNANCE_REPO/inbox")
 fi
 
+# Нет downstream-директорий — нечего проверять (свежий пользователь без PACK-репо)
+if [ "${#DOWNSTREAM_DIRS[@]}" -eq 0 ]; then
+    echo "[check-arch-version] no PACK-* repos and IWE_GOVERNANCE_REPO not set — skipping"
+    exit 0
+fi
+
 drift_count=0
 ok_count=0
 unknown_count=0
