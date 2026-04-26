@@ -32,12 +32,10 @@ CHECK1_FAIL=0
 for pattern in "tserentserenov" "PACK-MIM" "aist_bot_newarchitecture" \
                "DS-Knowledge-Index-Tseren" "DS-IT-systems" "DS-ai-systems" \
                "DS-my-strategy" "engines/tailor"; do
-    # setup.sh исключается из чека 1 симметрично с чеками 2/3 (там есть legacy fallback
-    # `for candidate in DS-strategy DS-my-strategy` для авторской преемственности — функциональный, не hardcoding).
     count=$(grep -rn "$pattern" "$TEMPLATE_DIR" --include="*.md" --include="*.sh" \
             --include="*.py" --include="*.json" --include="*.plist" --include="*.yaml" \
             --exclude='validate-template.sh' --exclude='LEARNING-PATH.md' \
-            --exclude='CHANGELOG.md' --exclude='setup.sh' 2>/dev/null \
+            --exclude='CHANGELOG.md' 2>/dev/null \
             | grep -v 'github.com/' | grep -v 'docs/adr/' | wc -l | tr -d ' ' || true)
     if [ "$count" -gt 0 ]; then
         [ "$CHECK1_FAIL" -eq 0 ] && echo "FAIL"
@@ -45,7 +43,7 @@ for pattern in "tserentserenov" "PACK-MIM" "aist_bot_newarchitecture" \
         grep -rn "$pattern" "$TEMPLATE_DIR" --include="*.md" --include="*.sh" \
             --include="*.py" --include="*.json" --include="*.plist" \
             --exclude='validate-template.sh' --exclude='LEARNING-PATH.md' \
-            --exclude='CHANGELOG.md' --exclude='setup.sh' 2>/dev/null \
+            --exclude='CHANGELOG.md' 2>/dev/null \
             | grep -v 'github.com/' | grep -v 'docs/adr/' | head -3 || true
         CHECK1_FAIL=1
         FAIL=1

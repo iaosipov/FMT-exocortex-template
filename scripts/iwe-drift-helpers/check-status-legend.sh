@@ -25,13 +25,7 @@
 set -eu
 
 IWE_ROOT="${IWE_ROOT:-$HOME/IWE}"
-if [ -z "${REGISTRY:-}" ]; then
-    if [ -z "${IWE_GOVERNANCE_REPO:-}" ]; then
-        echo "[check-status-legend] set IWE_GOVERNANCE_REPO or REGISTRY env-var" >&2
-        exit 0
-    fi
-    REGISTRY="$IWE_ROOT/$IWE_GOVERNANCE_REPO/docs/WP-REGISTRY.md"
-fi
+REGISTRY="${REGISTRY:-$IWE_ROOT/${IWE_GOVERNANCE_REPO:-}/docs/WP-REGISTRY.md}"
 MODE="${MODE:-all}"
 
 # Терминальные статусы — закрытие РП. Источник: легенда WP-REGISTRY.md.

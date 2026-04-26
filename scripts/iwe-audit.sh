@@ -277,6 +277,98 @@ fi
 
 echo ""
 
+# ---------- Раздел 4: User customizations (L3) ----------
+#
+# L3 живёт в 3-х местах: extensions/, params.yaml (отличия от skeleton),
+# AUTHOR-ONLY зоны в .claude/rules/distinctions.md.
+# Цель — показать, что после restore личные кастомизации на месте.
+# Это **информационная** секция: отсутствие L3 ≠ failure (новый пилот ещё
+# ничего не настроил). Verdict выносит Аудитор содержательно.
+
+echo "## 4. User customizations (L3)"
+echo ""
+
+# 4a. extensions/
+EXT_DIR="$IWE_ROOT/extensions"
+echo "### Extensions"
+echo ""
+if [ ! -d "$EXT_DIR" ]; then
+    echo "_extensions/ директория отсутствует — расширения не настроены_"
+else
+    set +e
+    EXT_FILES=$(find "$EXT_DIR" -maxdepth 1 -type f -name "*.md" ! -name "README.md" 2>/dev/null | sort)
+    set -e
+    if [ -z "$EXT_FILES" ]; then
+        echo "_В extensions/ только README — пользовательских хуков нет_"
+    else
+        EXT_COUNT=$(printf '%s\n' "$EXT_FILES" | wc -l | tr -d ' ')
+        echo "**Найдено хуков:** $EXT_COUNT"
+        echo ""
+        echo "| Hook | Размер |"
+        echo "|---|---|"
+        printf '%s\n' "$EXT_FILES" | while read -r ext_file; do
+            ext_name=$(basename "$ext_file")
+            ext_size=$(wc -l < "$ext_file" | tr -d ' ')
+            printf "| \`%s\` | %s строк |\n" "$ext_name" "$ext_size"
+        done
+    fi
+fi
+echo ""
+
+# 4b. params.yaml — отличия от skeleton
+echo "### params.yaml — отличия от шаблона"
+echo ""
+PARAMS_USER="$IWE_ROOT/params.yaml"
+PARAMS_TEMPLATE="$IWE_ROOT/FMT-exocortex-template/params.yaml"
+if [ ! -f "$PARAMS_USER" ]; then
+    echo "_params.yaml не найден — конфигурация не инициализирована_"
+elif [ ! -f "$PARAMS_TEMPLATE" ]; then
+    echo "_FMT-exocortex-template/params.yaml не найден — сравнение невозможно_"
+else
+    set +e
+    # Игнорируем комментарии и пустые строки при сравнении
+    PARAMS_DIFF=$(diff <(grep -vE '^\s*(#|$)' "$PARAMS_TEMPLATE" | sort) \
+                       <(grep -vE '^\s*(#|$)' "$PARAMS_USER" | sort) 2>&1)
+    set -e
+    if [ -z "$PARAMS_DIFF" ]; then
+        echo "_Полное совпадение со skeleton._"
+    else
+        PARAMS_DIFF_LINES=$(printf '%s\n' "$PARAMS_DIFF" | wc -l | tr -d ' ')
+        echo "**Отличий:** $PARAMS_DIFF_LINES строк (показаны топ-15)"
+        echo ""
+        echo '```diff'
+        printf '%s\n' "$PARAMS_DIFF" | head -15
+        echo '```'
+    fi
+fi
+echo ""
+
+# 4c. AUTHOR-ONLY зоны в distinctions.md
+echo "### AUTHOR-ONLY зоны"
+echo ""
+DIST_FILE="$IWE_ROOT/.claude/rules/distinctions.md"
+if [ ! -f "$DIST_FILE" ]; then
+    echo "_distinctions.md не найден_"
+else
+    # Считаем строки внутри блоков <!-- AUTHOR-ONLY --> ... <!-- /AUTHOR-ONLY -->
+    # ИЛИ под заголовком "## Различения (авторские" (текущая авторская конвенция)
+    # grep -c возвращает rc=1 при 0 матчей, что в связке с || echo даёт "0\n0"
+    set +e
+    AUTHOR_HEADER=$(grep -c "^## Различения (авторские" "$DIST_FILE" 2>/dev/null)
+    AUTHOR_BLOCKS=$(grep -c "<!-- AUTHOR-ONLY" "$DIST_FILE" 2>/dev/null)
+    set -e
+    [ -z "$AUTHOR_HEADER" ] && AUTHOR_HEADER=0
+    [ -z "$AUTHOR_BLOCKS" ] && AUTHOR_BLOCKS=0
+    if [ "$AUTHOR_HEADER" -eq 0 ] && [ "$AUTHOR_BLOCKS" -eq 0 ]; then
+        echo "_Авторских/L3-различений не найдено (нормально для нового пилота)_"
+    else
+        echo "✅ Найдены маркеры L3:"
+        [ "$AUTHOR_HEADER" -gt 0 ] && echo "- секция \`## Различения (авторские)\` присутствует"
+        [ "$AUTHOR_BLOCKS" -gt 0 ] && echo "- блоков \`<!-- AUTHOR-ONLY -->\`: $AUTHOR_BLOCKS"
+    fi
+fi
+echo ""
+
 # ---------- Exit code ----------
 
 # 2 = критичные gaps; 1 = warnings; 0 = ОК

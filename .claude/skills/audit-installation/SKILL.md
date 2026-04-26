@@ -1,6 +1,6 @@
 ---
 name: audit-installation
-description: Аудит пользовательской инсталляции IWE. Запускает scripts/iwe-audit.sh + MCP healthcheck, передаёт отчёт subagent'у в роли VR.R.002 Аудитор (context isolation) → verdict ✅/⚠️/❌ по 4 компонентам (L1, ритуалы, MCP, DS-strategy). Используй после restore из бэкапа, после update.sh, или при еженедельной сверке.
+description: Аудит пользовательской инсталляции IWE. Запускает scripts/iwe-audit.sh + MCP healthcheck, передаёт отчёт subagent'у в роли VR.R.002 Аудитор (context isolation) → verdict ✅/⚠️/❌ по 5 компонентам (Inventory, L1 drift, DS-strategy, L3 customizations, MCP). Используй после restore из бэкапа, после update.sh, или при еженедельной сверке.
 argument-hint: "[--skip-mcp] [--critical]"
 ---
 
@@ -14,11 +14,14 @@ argument-hint: "[--skip-mcp] [--critical]"
 
 ## Обещание
 
-За ≤5 минут — markdown-отчёт ✅/⚠️/❌ по 4 компонентам инсталляции:
-1. **L1 (платформа)** — drift с FMT-exocortex-template
-2. **Ритуалы** — smoke-test `/day-open`, `/day-close` (deferred до dry-run mode — пока inventory check)
-3. **MCP** — healthcheck 4 tools
-4. **DS-strategy** — git status + diff с FMT-strategy-template
+За ≤5 минут — markdown-отчёт ✅/⚠️/❌ по 5 компонентам инсталляции:
+1. **Inventory** — все ли критичные L1-файлы (CLAUDE.md, скиллы, протоколы) на месте
+2. **L1 drift** — расхождения с FMT-exocortex-template
+3. **DS-strategy** — git status + diff с FMT-strategy-template
+4. **L3 customizations** — extensions/, отличия params.yaml от skeleton, AUTHOR-ONLY зоны
+5. **MCP healthcheck** — 4 tools отвечают (с уважением к подписочному гейтингу DP.SC.112)
+
+Ритуалы (smoke-test `/day-open`, `/day-close`) — отложены до dry-run mode в самих скиллах; сейчас покрываются через Inventory check (наличие SKILL.md + protocol-*.md).
 
 Verdict выносит subagent в роли Аудитора, читая отчёт **без знаний о текущей сессии** (context isolation).
 
