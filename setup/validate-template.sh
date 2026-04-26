@@ -146,25 +146,35 @@ done
 
 # 6. Нет хардкод-путей к скриптам в протоколах/скиллах (WP-219, DP.FM.009)
 # Протоколы и скиллы должны использовать $IWE_SCRIPTS / $IWE_ROLES / $IWE_TEMPLATE / $IWE_WORKSPACE
-# вместо абсолютных путей к FMT-exocortex-template/scripts|roles.
+# вместо абсолютных путей к FMT-exocortex-template/scripts|roles или bare ~/IWE/scripts.
+# Enumerate-all: собираем ВСЕ нарушения по всем паттернам, выводим списком, потом fail (предотвращает iterative fix-retry).
 echo -n "[6/6] Hardcoded script paths in protocols/skills... "
 CHECK6_FAIL=0
-CHECK6_FILES=""
-for pattern in 'FMT-exocortex-template/scripts' 'FMT-exocortex-template/roles/[a-z]*/scripts'; do
+CHECK6_HITS=""
+# Паттерн 1-2: ссылки на FMT-template путь (legacy DP.FM.009)
+# Паттерн 3: bare `bash ~/IWE/scripts/X.sh` или `bash $HOME/IWE/scripts/X.sh` без fallback на $IWE_SCRIPTS
+#   (исключает корректные `bash ${IWE_SCRIPTS:-$HOME/IWE/scripts}/X.sh`, т.к. после `bash ` идёт `${`, не `~` и не `$HOME`)
+for pattern in 'FMT-exocortex-template/scripts' \
+               'FMT-exocortex-template/roles/[a-z]*/scripts' \
+               'bash (~|\$HOME)/IWE/scripts/'; do
     hits=$(grep -rnE "$pattern" \
             "$TEMPLATE_DIR/memory" \
             "$TEMPLATE_DIR/.claude/skills" \
             --include="*.md" 2>/dev/null \
             | grep -v '\$IWE_' || true)
     if [ -n "$hits" ]; then
-        [ "$CHECK6_FAIL" -eq 0 ] && echo "FAIL"
-        echo "  Pattern '$pattern' found (должен быть \$IWE_SCRIPTS / \$IWE_ROLES):"
-        echo "$hits" | head -3
+        CHECK6_HITS="${CHECK6_HITS}${CHECK6_HITS:+$'\n'}--- Pattern: $pattern ---"$'\n'"$hits"
         CHECK6_FAIL=1
         FAIL=1
     fi
 done
-[ "$CHECK6_FAIL" -eq 0 ] && echo "PASS"
+if [ "$CHECK6_FAIL" -eq 1 ]; then
+    echo "FAIL"
+    echo "  Должен быть \$IWE_SCRIPTS / \$IWE_ROLES (или \${IWE_SCRIPTS:-\$HOME/IWE/scripts} для inline-команд):"
+    echo "$CHECK6_HITS"
+else
+    echo "PASS"
+fi
 
 # 7. settings.json hooks ↔ .claude/hooks/ cross-ref (issue #13)
 # Проверка в обе стороны:
