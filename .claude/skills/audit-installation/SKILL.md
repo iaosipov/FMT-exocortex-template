@@ -180,12 +180,18 @@ Coverage: N/4
 
 1. **Сохранить полный отчёт + verdict в файл:**
    ```bash
-   AUDIT_LOG_DIR="$HOME/IWE/scripts"
-   [ -d "$AUDIT_LOG_DIR" ] || AUDIT_LOG_DIR="${IWE_SCRIPTS:-$HOME/IWE}"
+   # Приоритет: workspace/scripts/ → $IWE_SCRIPTS (FMT-template/scripts/ для user-mode) → $HOME/IWE
+   if [ -d "$HOME/IWE/scripts" ]; then
+       AUDIT_LOG_DIR="$HOME/IWE/scripts"
+   elif [ -n "${IWE_SCRIPTS:-}" ] && [ -d "$IWE_SCRIPTS" ]; then
+       AUDIT_LOG_DIR="$IWE_SCRIPTS"
+   else
+       AUDIT_LOG_DIR="$HOME/IWE"
+   fi
+   mkdir -p "$AUDIT_LOG_DIR"
    AUDIT_LOG="$AUDIT_LOG_DIR/iwe-audit-$(date +%Y%m%d-%H%M%S).log"
    # Записать конкатенацию: full_report + verdict
    ```
-   Логика выбора пути: workspace/scripts/ если есть (author-mode), иначе `$IWE_SCRIPTS` (для user-mode он указывает на FMT-template/scripts/, см. setup.sh:524).
 2. **Вывести пользователю:**
    - Полный markdown-отчёт (секции 1-6)
    - Verdict от Аудитора
