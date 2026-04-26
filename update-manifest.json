@@ -1,5 +1,5 @@
 {
-  "version": "0.28.4",
+  "version": "0.28.5",
   "description": "Манифест платформенных файлов FMT-exocortex-template. Используется update.sh для доставки обновлений.",
   "files": [
     {"path": ".claude.md.base"},
@@ -11,6 +11,7 @@
     {"path": ".claude/detectors/detector_pattern_awareness.sh"},
     {"path": ".claude/hooks/capture-bus.sh"},
     {"path": ".claude/hooks/close-gate-reminder.sh"},
+    {"path": ".claude/hooks/dry-run-gate.sh"},
     {"path": ".claude/hooks/extensions-gate.sh"},
     {"path": ".claude/hooks/precompact-checkpoint.sh"},
     {"path": ".claude/hooks/protocol-artifact-validate.sh"},
@@ -28,6 +29,7 @@
     {"path": ".claude/rules/formatting.md"},
     {"path": ".claude/settings.json"},
     {"path": ".claude/skills/archgate/SKILL.md"},
+    {"path": ".claude/skills/audit-installation/SKILL.md"},
     {"path": ".claude/skills/day-close/SKILL.md"},
     {"path": ".claude/skills/day-open/SKILL.md"},
     {"path": ".claude/skills/extend/SKILL.md"},
@@ -65,6 +67,7 @@
     {"path": "docs/adr/ADR-001-setup-in-template.md"},
     {"path": "docs/adr/ADR-002-modular-roles.md"},
     {"path": "docs/adr/ADR-003-hosting-platform.md"},
+    {"path": "docs/migrations/strategy-v0.27.0.md"},
     {"path": "docs/onboarding/onboarding-diagrams.md"},
     {"path": "docs/onboarding/onboarding-guide.md"},
     {"path": "docs/onboarding/onboarding-slides.md"},
@@ -76,6 +79,7 @@
     {"path": "memory/MEMORY.md"},
     {"path": "memory/checklists.md"},
     {"path": "memory/day-rhythm-config.yaml"},
+    {"path": "memory/dry-run-contract.md"},
     {"path": "memory/fpf-reference.md"},
     {"path": "memory/hard-distinctions.md"},
     {"path": "memory/navigation.md"},
@@ -116,6 +120,7 @@
     {"path": "roles/strategist/prompts/evening.md"},
     {"path": "roles/strategist/prompts/note-review.md"},
     {"path": "roles/strategist/prompts/session-prep.md"},
+    {"path": "roles/strategist/prompts/strategy-session-weekly.md"},
     {"path": "roles/strategist/prompts/strategy-session.md"},
     {"path": "roles/strategist/prompts/week-review.md"},
     {"path": "roles/strategist/role.yaml"},
@@ -150,6 +155,7 @@
     {"path": "scripts/backup-icloud.sh"},
     {"path": "scripts/check-dirty-repos.sh"},
     {"path": "scripts/day-close.sh"},
+    {"path": "scripts/iwe-audit.sh"},
     {"path": "scripts/iwe-drift-helpers/check-arch-version.sh"},
     {"path": "scripts/iwe-drift-helpers/check-status-legend.sh"},
     {"path": "scripts/iwe-drift.sh"},
@@ -163,6 +169,13 @@
     {"path": "setup/optional/setup-calendar.sh"},
     {"path": "setup/optional/setup-cloud-scheduler.sh"},
     {"path": "setup/validate-template.sh"},
+    {"path": "templates/strategy-skeleton/CLAUDE.md"},
+    {"path": "templates/strategy-skeleton/README.md"},
+    {"path": "templates/strategy-skeleton/current/README.md"},
+    {"path": "templates/strategy-skeleton/docs/Dissatisfactions.md"},
+    {"path": "templates/strategy-skeleton/docs/Strategy.md"},
+    {"path": "templates/strategy-skeleton/docs/WP-REGISTRY.md"},
+    {"path": "templates/strategy-skeleton/inbox/fleeting-notes.md"},
     {"path": "update.sh"}
   ]
 }

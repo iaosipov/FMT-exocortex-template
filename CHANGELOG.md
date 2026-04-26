@@ -5,23 +5,28 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.28.5] — 2026-04-26
 
-### Fixed
-- **`.claude/hooks/protocol-artifact-validate.sh`** — проверка секции «Наработки Scout» теперь conditional: если секция отсутствует в DayPlan (Scout не сконфигурирован, нет `DS-agent-workspace`), валидатор не блокирует. Маркеры `disabled` / `not configured` принимаются как валидные.
-- **`roles/synchronizer/scripts/dt-collect.sh:233`** — `collect_sessions()` использовал hardcoded `$WORKSPACE/DS-strategy/inbox/open-sessions.log`, минуя `$GOVERNANCE_DIR`. Параметризовано как остальные функции файла.
-- **`setup.sh:480-499`** — auto-detect governance repo упрощён: убран literal `DS-my-strategy` из priority-list (legacy случай покрывается wildcard `DS-*strategy*` ниже). Снимает FAIL чека 1 в `validate-template.sh`.
-- **`templates/strategy-skeleton/README.md:17,20`** — literal `~/IWE/DS-my-strategy/` → `~/IWE/DS-strategy/` (стандартное имя для пилота из CLAUDE.md §9; `DS-my-strategy` — авторское исключение, держится в global-blacklist валидатора). Файл добавлен в `cb22aaa` и не прошёл следующий же template-sync — фикс закрывает регрессию.
+### Fixed (red-team Евгения, 10 blockers B1-B10)
 
-### Changed
-- **`.githooks/pre-commit`** — добавлен блок «template validation»: если в staging есть `*.md|sh|py|json|plist|yaml`, прогоняется полный `setup/validate-template.sh`. Раньше hook проверял только секреты, CHANGELOG↔manifest sync и кросс-платформу в `.sh`; ручные коммиты в FMT с author-specific литералами проходили мимо валидации, ошибку ловил только `template-sync.sh` пост-фактум (cb22aaa — наглядный пример). Escape hatch: `git commit --no-verify`.
-
-### Added
-- **`docs/migrations/strategy-v0.27.0.md`** — migration path для пользователей, у которых `DS-strategy/docs/Strategy.md` создан до v0.27.0. Объясняет, какие блоки v0.27.0 (фаза стратегической позиции, калибр личности, источник НЭП-триады) добавить вручную (≤15 мин) или делегировать Claude через diff `seed/` ↔ `DS-strategy/`.
-- **Расширенные NL-триггеры в `.claude/skills/strategy-session/SKILL.md`** + упоминание `/strategy-session` slash-команды и альтернатив в `docs/QUICK-START.md`. Покрытие глаголов («запустим/начнём/откроем»), сокращения «стратсессия», «strategy planning».
+- **B1 — `update-manifest.json`** — добавлены 4 группы файлов, которые попали в FMT через коммиты, но не доставлялись через `update.sh`: `.claude/skills/audit-installation/SKILL.md`, `scripts/iwe-audit.sh`, `docs/migrations/strategy-v0.27.0.md`, `templates/strategy-skeleton/**`. Manifest перегенерирован через `generate-manifest.sh` после bump версии.
+- **B2 — `setup.sh` + `update.sh`** — substitution map расширен с 7 до 9 placeholder'ов: добавлены `{{GOVERNANCE_REPO}}` и `{{IWE_TEMPLATE}}`. Раньше эти placeholder'ы оставались литералами в `.claude/skills/strategy-session/SKILL.md` после `setup.sh` / `update.sh`. Auto-detection `GOVERNANCE_REPO` перенесён ВЫШЕ блока substitution. Legacy `.exocortex.env` без этих ключей мигрируются автоматически в `update.sh`.
+- **B3 — `.claude/skills/strategy-session/SKILL.md` + `seed/strategy/docs/Strategy.md`** — initial flow раньше включался только при отсутствии `Strategy.md`, но `seed/strategy/` его создавал → fresh setup всегда уходил в weekly. Введён skeleton-marker `<!-- IWE-INITIAL-NEEDED -->` в seed-файле; skill переключается в initial при наличии маркера ИЛИ явного intent пользователя («первая», «c нуля»). §2.5 добавлен шаг удаления маркера после initial-сессии.
+- **B4 — `roles/strategist/prompts/strategy-session.md` + `strategy-session-weekly.md`** — старый weekly prompt переименован в `strategy-session-weekly.md`; новый `strategy-session.md` — тонкий dispatcher, делегирующий в `.claude/skills/strategy-session/SKILL.md`. `strategist.sh strategy-session` (headless и интерактивный) теперь идёт через тот же skill, что и slash-команда.
+- **B5 — `.claude/skills/{day-close,week-close,run-protocol}/SKILL.md`** — skills делегировали в несуществующие секции `memory/protocol-close.md § День / § Неделя`. Day Close расширен до полного алгоритма (201 строка, 12 шагов, чеклист 22 пункта). Week Close — самостоятельный алгоритм (11 шагов, чеклист 11 пунктов). Run-protocol таблица обновлена: маршрутизация = protocol-close.md (краткая), полный алгоритм = SKILL.md соответствующего skill.
+- **B6 — `.claude/hooks/protocol-artifact-validate.sh:56`** — `"Наработки Scout"` убран из mandatory `SECTIONS[]`. Раньше отсутствие секции блокировало DayPlan; теперь Scout проверяется отдельным conditional блоком (только если секция реально присутствует в файле).
+- **B7 — `roles/strategist/prompts/{note-review,session-prep}.md`** — feedback-triage QA-отчёт стал conditional через `[ ! -d "$WORKSPACE/DS-agent-workspace" ]`. Раньше требование было unconditional → fresh user без `DS-agent-workspace` не мог запустить session-prep.
+- **B8 — `roles/synchronizer/scripts/dt-collect.sh:233`** — `collect_sessions()` использовал hardcoded `$WORKSPACE/DS-strategy/inbox/open-sessions.log`, минуя `$GOVERNANCE_DIR`. Параметризовано (post-0.28.4 фикс не покрыл эту строку, хотя CHANGELOG утверждал обратное).
+- **B9 — `.githooks/pre-commit`** — блок template validation перенесён ВЫШЕ `[ -z "$STAGED_SH" ] && exit 0`. Раньше commit с staged только `.md/.yaml/.json` пропускал валидацию шаблона → leak'и author-specific литералов проходили в FMT (`cb22aaa` regression).
+- **B10 — `.claude/skills/audit-installation/SKILL.md` + `scripts/iwe-audit.sh` + `scripts/iwe-drift.sh`** — три фикса: (a) audit skill ищет `iwe-audit.sh` через `$IWE_SCRIPTS` (canonical) с fallback на legacy путь; (b) `iwe-audit.sh` ищет `iwe-drift.sh` в трёх кандидатах ($IWE_TEMPLATE, $IWE_ROOT/scripts, $IWE_ROOT/FMT-.../scripts); (c) `iwe-drift.sh` парсит ТОЛЬКО секцию `pairs:` манифеста (раньше `activity_checks` секция засоряла отчёт пустыми pair-rows); (d) `check: script:*` теперь реально вызывает helper-скрипт (раньше декларации были, исполнения не было).
 
 ### Why
-Перепроверка evidence pack пилота `boberru@gmail.com` после релиза 0.28.4 нашла три пропуска (Scout / dt-collect / migration), которые в первом проходе оказались за горизонтом «приоритетных 4 пунктов». Все три — узкие места с малым blast-радиусом, но ломали UX отдельных сценариев.
+3 системных провала за 0.28.4 → 0.28.5 (red-team Евгения):
+1. **Author-blind testing** — fresh user setup не прогонялся; B1, B2, B3, B7 ловятся одним прогоном `setup.sh` на чистой машине.
+2. **Manifest drift** — `update-manifest.json` обновляется вручную; `generate-manifest.sh` есть, но не вызывается ни pre-commit, ни CI → B1.
+3. **Changelog ≠ verification** — claims в CHANGELOG не сверяются с кодом → B8 (post-0.28.4 changelog утверждал параметризацию, которой не было).
+
+Defer (на отдельный РП): автоматический `generate-manifest.sh` в pre-commit; changelog↔code drift detector.
 
 ## [0.28.4] — 2026-04-26
 

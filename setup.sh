@@ -228,6 +228,28 @@ HOME_DIR="$HOME"
 # Compute Claude project slug: /Users/alice/IWE → -Users-alice-IWE
 CLAUDE_PROJECT_SLUG="$(echo "$WORKSPACE_DIR" | tr '/' '-')"
 
+# Auto-detect governance repo (used in placeholder substitution + .exocortex.env).
+# Стратегия: (1) DS-strategy (default), (2) wildcard DS-*-strategy* (legacy/локальные имена).
+# Если ни один не найден — default DS-strategy (будет создан при первом seed-ритуале).
+GOVERNANCE_REPO=""
+if [ -d "$WORKSPACE_DIR/DS-strategy" ]; then
+    GOVERNANCE_REPO="DS-strategy"
+fi
+if [ -z "$GOVERNANCE_REPO" ]; then
+    for d in "$WORKSPACE_DIR"/DS-*; do
+        case "${d##*/}" in
+            DS-*strategy*|DS-strategy)
+                GOVERNANCE_REPO="${d##*/}"
+                break
+                ;;
+        esac
+    done
+fi
+GOVERNANCE_REPO="${GOVERNANCE_REPO:-DS-strategy}"
+
+# IWE_TEMPLATE = путь к FMT-репо (где живёт setup.sh).
+IWE_TEMPLATE_PATH="$TEMPLATE_DIR"
+
 echo ""
 echo "Configuration:"
 echo "  GitHub user:    $GITHUB_USER"
@@ -285,6 +307,8 @@ CLAUDE_PROJECT_SLUG=$CLAUDE_PROJECT_SLUG
 TIMEZONE_HOUR=$TIMEZONE_HOUR
 TIMEZONE_DESC=$TIMEZONE_DESC
 HOME_DIR=$HOME_DIR
+GOVERNANCE_REPO=$GOVERNANCE_REPO
+IWE_TEMPLATE=$IWE_TEMPLATE_PATH
 
 # === Platform LLM Proxy (optional own API key for unlimited usage) ===
 PLATFORM_LLM_PROXY_URL=https://llm.aisystant.com/v1
@@ -316,6 +340,8 @@ if $DRY_RUN; then
     echo "    {{TIMEZONE_HOUR}} → $TIMEZONE_HOUR"
     echo "    {{TIMEZONE_DESC}} → $TIMEZONE_DESC"
     echo "    {{HOME_DIR}} → $HOME_DIR"
+    echo "    {{GOVERNANCE_REPO}} → $GOVERNANCE_REPO"
+    echo "    {{IWE_TEMPLATE}} → $IWE_TEMPLATE_PATH"
 else
     find "$TEMPLATE_DIR" -type f \( -name "*.md" -o -name "*.json" -o -name "*.sh" -o -name "*.plist" -o -name "*.yaml" -o -name "*.yml" \) | while IFS= read -r file; do
         sed_inplace \
@@ -326,6 +352,8 @@ else
             -e "s|{{TIMEZONE_HOUR}}|$TIMEZONE_HOUR|g" \
             -e "s|{{TIMEZONE_DESC}}|$TIMEZONE_DESC|g" \
             -e "s|{{HOME_DIR}}|$HOME_DIR|g" \
+            -e "s|{{GOVERNANCE_REPO}}|$GOVERNANCE_REPO|g" \
+            -e "s|{{IWE_TEMPLATE}}|$IWE_TEMPLATE_PATH|g" \
             "$file"
     done
 
@@ -477,25 +505,9 @@ IWE_ENV_FILE="$HOME/.iwe-paths"
 ZSHENV_FILE="$HOME/.zshenv"
 IWE_ENV_MARKER="# IWE environment (WP-219, DP.FM.009): lookup-слой для путей к скриптам"
 
-# Auto-detect governance repo для env-var IWE_GOVERNANCE_REPO.
+# GOVERNANCE_REPO уже определён выше (для placeholder substitution и .exocortex.env).
 # Используется в .claude/lib/capture_writer.sh, .claude/detectors/detector_decision.sh,
 # scripts/iwe-drift-helpers/check-arch-version.sh, check-status-legend.sh.
-# Стратегия: (1) DS-strategy (default-имя из шаблона), (2) wildcard DS-*-strategy*
-# (ловит legacy/локальные конвенции, например `DS-foo-strategy` или старое `DS-*-strategy`-имя).
-GOVERNANCE_REPO=""
-if [ -d "$WORKSPACE_DIR/DS-strategy" ]; then
-    GOVERNANCE_REPO="DS-strategy"
-fi
-if [ -z "$GOVERNANCE_REPO" ]; then
-    for d in "$WORKSPACE_DIR"/DS-*; do
-        case "${d##*/}" in
-            DS-*strategy*|DS-strategy)
-                GOVERNANCE_REPO="${d##*/}"
-                break
-                ;;
-        esac
-    done
-fi
 
 if $DRY_RUN; then
     echo "  [DRY RUN] Would write $IWE_ENV_FILE with IWE_WORKSPACE/IWE_TEMPLATE/IWE_SCRIPTS/IWE_ROLES/IWE_GOVERNANCE_REPO"

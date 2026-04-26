@@ -52,12 +52,12 @@ if [ -z "$DAYPLAN" ]; then
   exit 0
 fi
 
-# Required sections (parameterized — update this list when format changes)
+# Required sections (parameterized — update this list when format changes).
+# Scout раздел опционален: проверяется отдельно ниже (см. блок "Scout").
 SECTIONS=(
   "План на сегодня"
   "Календарь"
   "IWE за ночь"
-  "Наработки Scout"
   "Разбор заметок"
   "Итоги вчера"
 )

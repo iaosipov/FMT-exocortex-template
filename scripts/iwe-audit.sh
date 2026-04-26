@@ -187,7 +187,18 @@ echo ""
 echo "## 2. L1 drift (платформа vs FMT)"
 echo ""
 
-DRIFT_SCRIPT="$IWE_ROOT/scripts/iwe-drift.sh"
+# B10 fix (0.28.5): drift-скрипт живёт в FMT-репо, не в workspace root.
+# Поддержка обоих layouts: legacy ($IWE_ROOT/scripts) + canonical ($IWE_TEMPLATE/scripts).
+DRIFT_SCRIPT=""
+for candidate in \
+    "$IWE_ROOT/FMT-exocortex-template/scripts/iwe-drift.sh" \
+    "$IWE_ROOT/scripts/iwe-drift.sh" \
+    "${IWE_TEMPLATE:-}/scripts/iwe-drift.sh"; do
+    if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+        DRIFT_SCRIPT="$candidate"
+        break
+    fi
+done
 if [ -f "$DRIFT_SCRIPT" ]; then
     # Не валим весь скрипт если iwe-drift падает — set -eu выключаем точечно
     set +e
