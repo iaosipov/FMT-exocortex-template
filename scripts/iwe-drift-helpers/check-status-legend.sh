@@ -25,7 +25,7 @@
 set -eu
 
 IWE_ROOT="${IWE_ROOT:-$HOME/IWE}"
-REGISTRY="${REGISTRY:-$IWE_ROOT/DS-my-strategy/docs/WP-REGISTRY.md}"
+REGISTRY="${REGISTRY:-$IWE_ROOT/${IWE_GOVERNANCE_REPO:-}/docs/WP-REGISTRY.md}"
 MODE="${MODE:-all}"
 
 # Терминальные статусы — закрытие РП. Источник: легенда WP-REGISTRY.md.

@@ -5,7 +5,7 @@
 #
 # Что делает:
 #   1. Сканирует PACK-*/pack/*/02-domain-entities/DP.ARCH.*.md → извлекает (id, version) из frontmatter.
-#   2. Сканирует PACK-*/**/*.md и DS-my-strategy/inbox/*.md → ищет `derived_from:` якоря с DP.ARCH.NNN@vX.Y.
+#   2. Сканирует PACK-*/**/*.md и $IWE_GOVERNANCE_REPO/inbox/*.md → ищет `derived_from:` якоря с DP.ARCH.NNN@vX.Y.
 #   3. Сравнивает: если downstream ссылается на версию, отличную от current → DRIFT.
 #   4. Печатает markdown-отчёт.
 #
@@ -98,13 +98,14 @@ for f in $ARCH_GLOB; do
 done
 
 # Шаг 2: пройти downstream-документы и найти якоря
-# Глобы: PACK + DS-my-strategy/inbox
-DOWNSTREAM_DIRS=(
-    "$IWE_ROOT/PACK-digital-platform"
-    "$IWE_ROOT/PACK-personal"
-    "$IWE_ROOT/PACK-MIM"
-    "$IWE_ROOT/DS-my-strategy/inbox"
-)
+# Глобы: все PACK-* + governance inbox (env IWE_GOVERNANCE_REPO)
+DOWNSTREAM_DIRS=()
+for pack in "$IWE_ROOT"/PACK-*/; do
+    [ -d "$pack" ] && DOWNSTREAM_DIRS+=("${pack%/}")
+done
+if [ -n "${IWE_GOVERNANCE_REPO:-}" ] && [ -d "$IWE_ROOT/$IWE_GOVERNANCE_REPO/inbox" ]; then
+    DOWNSTREAM_DIRS+=("$IWE_ROOT/$IWE_GOVERNANCE_REPO/inbox")
+fi
 
 drift_count=0
 ok_count=0
