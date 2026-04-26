@@ -5,18 +5,17 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.28.4] — 2026-04-26
 
 ### Fixed
-- `.claude/lib/capture_writer.sh` — убран hardcoded fallback `DS-IT-systems/activity-hub/.env`. Теперь читается из `${IWE_DB_ENV_FILE:-}` env-var (sync с авторской копией).
-- `.claude/detectors/detector_decision.sh` — fallback на governance-репо параметризован через `${IWE_GOVERNANCE_REPO:-}` (вместо hardcoded `DS-my-strategy`).
-- `.claude/detectors/README.md` — пример dry-run переписан с `/Users/you/IWE/DS-my-strategy/...` на `/Users/.../IWE/<governance-repo>/...` (placeholder-формат, проходит validate-template.sh). Удалена ссылка на авторский WP-документ из header'а.
-- `memory/t-checklist.md` — упоминание `knowledge-mcp` заменено на generic «MCP-сервер».
-- `scripts/iwe-drift-helpers/check-arch-version.sh` — захардкоженный список `PACK-digital-platform`/`PACK-personal`/`PACK-MIM`/`DS-my-strategy/inbox` заменён на auto-discover `PACK-*/` + `${IWE_GOVERNANCE_REPO}/inbox`. Добавлен ранний exit 0 при пустом массиве (предотвращает unbound-variable crash под `set -eu` у нового пользователя).
-- `scripts/iwe-drift-helpers/check-status-legend.sh` — `REGISTRY` параметризован через `${IWE_GOVERNANCE_REPO}`. Добавлен exit 0 с понятным сообщением при незаданном env (вместо `$IWE_ROOT//docs/...` с двойным слэшем).
+- **`.claude/skills/week-close/SKILL.md`** — `{{HOME_DIR}}/IWE/scripts/{backup-icloud,check-dirty-repos}.sh` → `${IWE_SCRIPTS}/...`. Прежний путь — место, куда `setup.sh` ничего не клал; скрипты лежат в `FMT-exocortex-template/scripts/`, доступны через `$IWE_SCRIPTS` env-var (генерируется `setup.sh:530`, WP-219). На свежем install Week Close падал на «file not found».
+- **`update.sh`** — case-фильтр пропагации в workspace расширен с `.claude/{skills,hooks,rules,settings.json}` до включения `.claude/{lib,config,detectors}/*`. Hook `capture-bus.sh` source-ит `lib/log_formatter.sh` и `config/capture-detectors.sh` — без них падает с «file not found». `setup.sh` уже был исправлен в `cea51e8`; этот коммит закрывает симметричный пробел в `update.sh`.
+
+### Added
+- **`.claude/skills/strategy-session/SKILL.md`** — skill-обёртка-диспетчер. Detect наличия `Strategy.md` / `WeekPlan` в governance-репо → initial flow (4 шага: цели → неудовлетворённости → первый WeekPlan → MEMORY.md) либо weekly flow (delegate в `roles/strategist/prompts/strategy-session.md`). Закрывает несоответствие между обещанием QUICK-START / README («Проведём первую стратегическую сессию») и runtime, где был только weekly prompt с предусловием draft WeekPlan от session-prep.
 
 ### Why
-Validation FAIL'ы template-sync (после промоций L3→FMT) приводили к шторму TG-уведомлений: scheduler.sh ретраил sync на каждом wake (11×/день) при стабильном FAIL, отправляя уведомление каждый раз. Системно: авторские константы в FMT → исключены через env-vars; дополнительно scheduler различает терминальный exit (3=validation) vs transient (1/2/124) — терминальный → mark_done без ретрая, transient → ретрай.
+После native reset на чистый upstream/main найдены три воспроизводимых пробела, которые ломают свежий `setup.sh` или вводят пользователя в заблуждение. Все три — раздельные регрессии сходящихся путей: (1) промоция scripts/ из workspace в FMT не сопровождалась обновлением SKILL.md; (2) расширение списка `.claude/*` подкаталогов в `setup.sh` не было синхронно перенесено в `update.sh`; (3) initial-режим стратегической сессии присутствует только в документации, без runtime-обвязки.
 
 ## [0.28.3] — 2026-04-25
 

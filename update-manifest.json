@@ -1,5 +1,5 @@
 {
-  "version": "0.28.3",
+  "version": "0.28.4",
   "description": "Манифест платформенных файлов FMT-exocortex-template. Используется update.sh для доставки обновлений.",
   "files": [
     {"path": ".claude.md.base"},
@@ -23,6 +23,7 @@
     {"path": ".claude/lib/capture_writer.sh"},
     {"path": ".claude/lib/log_formatter.sh"},
     {"path": ".claude/lib/resolve_target_repo.sh"},
+    {"path": ".claude/logs/capture_log.jsonl"},
     {"path": ".claude/rules/distinctions.md"},
     {"path": ".claude/rules/formatting.md"},
     {"path": ".claude/settings.json"},
@@ -36,6 +37,7 @@
     {"path": ".claude/skills/ke/SKILL.md"},
     {"path": ".claude/skills/run-protocol/SKILL.md"},
     {"path": ".claude/skills/setup-wakatime/SKILL.md"},
+    {"path": ".claude/skills/strategy-session/SKILL.md"},
     {"path": ".claude/skills/think/SKILL.md"},
     {"path": ".claude/skills/verify/SKILL.md"},
     {"path": ".claude/skills/week-close/SKILL.md"},
@@ -148,6 +150,8 @@
     {"path": "scripts/backup-icloud.sh"},
     {"path": "scripts/check-dirty-repos.sh"},
     {"path": "scripts/day-close.sh"},
+    {"path": "scripts/iwe-drift-helpers/check-arch-version.sh"},
+    {"path": "scripts/iwe-drift-helpers/check-status-legend.sh"},
     {"path": "scripts/iwe-drift.sh"},
     {"path": "setup.sh"},
     {"path": "setup/optional/COVER-IMAGES.md"},
