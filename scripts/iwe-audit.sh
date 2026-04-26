@@ -250,10 +250,18 @@ else
     echo "### Diff с FMT-strategy-template"
     echo ""
 
+    # Шаблон ищется в двух местах:
+    # (1) {{WORKSPACE_DIR}}/FMT-strategy-template/ — отдельная директория (авторская)
+    # (2) {{WORKSPACE_DIR}}/FMT-exocortex-template/templates/strategy-skeleton/ — внутри FMT (приезжает через update.sh)
     FMT_DIR="$IWE_ROOT/FMT-strategy-template"
+    if [ ! -d "$FMT_DIR" ] && [ -d "$IWE_ROOT/FMT-exocortex-template/templates/strategy-skeleton" ]; then
+        FMT_DIR="$IWE_ROOT/FMT-exocortex-template/templates/strategy-skeleton"
+    fi
     if [ ! -d "$FMT_DIR" ]; then
-        echo "_N/A — \`FMT-strategy-template\` не найден (это нормально, шаблон может ещё не существовать)._"
+        echo "_N/A — шаблон не найден ни в \`FMT-strategy-template/\`, ни в \`FMT-exocortex-template/templates/strategy-skeleton/\`._"
     else
+        echo "_Источник шаблона: \`${FMT_DIR#$IWE_ROOT/}\`_"
+        echo ""
         set +e
         FMT_DIFF=$(diff -rq "$DS_DIR/" "$FMT_DIR/" 2>&1)
         FMT_DIFF_RC=$?
@@ -368,6 +376,98 @@ else
     fi
 fi
 echo ""
+
+# ---------- Раздел 5: Update prerequisites ----------
+#
+# Проверяем предусловия успешного запуска update.sh, не запуская его сам.
+# Цель — диагностировать «почему update упадёт» ДО запуска (Q7 РП-265).
+# Не failure для всего аудита: отсутствие prereq → ⚠️ warning, пилот сам решает.
+
+echo "## 5. Update prerequisites"
+echo ""
+
+UPD_WARN=0
+UPD_FAIL=0
+
+echo "### Бинарники"
+echo ""
+echo "| Бинарник | Статус | Путь |"
+echo "|---|---|---|"
+for bin in git curl python3; do
+    set +e
+    BIN_PATH=$(command -v "$bin" 2>/dev/null)
+    set -e
+    if [ -n "$BIN_PATH" ]; then
+        printf "| \`%s\` | ✅ | %s |\n" "$bin" "$BIN_PATH"
+    else
+        printf "| \`%s\` | ❌ | — |\n" "$bin"
+        UPD_FAIL=$((UPD_FAIL + 1))
+    fi
+done
+echo ""
+
+echo "### Конфигурация (~/.exocortex.env)"
+echo ""
+ENV_FILE="$HOME/.exocortex.env"
+if [ ! -f "$ENV_FILE" ]; then
+    if [ "$AUTHOR_MODE" = "1" ]; then
+        echo "ℹ️ \`~/.exocortex.env\` не нужен в author_mode (плейсхолдеры подставляются template-sync.sh, не update.sh)."
+    else
+        echo "❌ Файл \`~/.exocortex.env\` отсутствует — update.sh не сможет подставить плейсхолдеры. Решение: запустить \`bash $IWE_ROOT/setup.sh\` (если первая установка) или скопировать из FMT-exocortex-template/templates/."
+        UPD_FAIL=$((UPD_FAIL + 1))
+    fi
+else
+    set +e
+    GH_USER=$(grep -E "^GITHUB_USER=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
+    set -e
+    if [ -z "$GH_USER" ] || [ "$GH_USER" = "{{GITHUB_USER}}" ]; then
+        echo "⚠️ \`GITHUB_USER\` пуст или = плейсхолдер. Решение: отредактировать \`~/.exocortex.env\`, проставить логин."
+        UPD_WARN=$((UPD_WARN + 1))
+    else
+        echo "✅ \`GITHUB_USER=$GH_USER\` заполнен"
+    fi
+fi
+echo ""
+
+echo "### Состояние FMT-exocortex-template"
+echo ""
+FMT_TPL="$IWE_ROOT/FMT-exocortex-template"
+if [ ! -d "$FMT_TPL" ]; then
+    echo "⚠️ \`FMT-exocortex-template/\` отсутствует — update.sh склонирует при первом запуске. Если update уже запускался и не получилось, проверь интернет до GitHub."
+    UPD_WARN=$((UPD_WARN + 1))
+elif [ ! -d "$FMT_TPL/.git" ]; then
+    echo "❌ \`FMT-exocortex-template/\` есть, но не git-репо — update.sh не сможет fetch/pull. Решение: переклонировать."
+    UPD_FAIL=$((UPD_FAIL + 1))
+else
+    set +e
+    FMT_DIRTY=$(git -C "$FMT_TPL" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    FMT_BRANCH=$(git -C "$FMT_TPL" branch --show-current 2>/dev/null)
+    set -e
+    if [ "$FMT_DIRTY" -gt 0 ]; then
+        echo "⚠️ \`FMT-exocortex-template/\` имеет $FMT_DIRTY uncommitted changes (ветка \`$FMT_BRANCH\`) — update может конфликтовать. Решение: \`git -C FMT-exocortex-template stash\` или коммит."
+        UPD_WARN=$((UPD_WARN + 1))
+    else
+        echo "✅ \`FMT-exocortex-template/\` чистый (ветка \`$FMT_BRANCH\`)"
+    fi
+fi
+echo ""
+
+if [ $UPD_FAIL -gt 0 ]; then
+    echo "**Вердикт раздела:** ❌ $UPD_FAIL критичных предусловия не выполнены — \`update.sh\` упадёт без них."
+elif [ $UPD_WARN -gt 0 ]; then
+    echo "**Вердикт раздела:** ⚠️ $UPD_WARN предупреждений — \`update.sh\` может частично сработать, но проверь рекомендации выше."
+else
+    echo "**Вердикт раздела:** ✅ всё готово к \`update.sh\`."
+fi
+echo ""
+
+# Учёт в итоговом exit code: critical-fail в update prereq поднимает CRITICAL_MISSING
+if [ $UPD_FAIL -gt 0 ]; then
+    CRITICAL_MISSING=$((CRITICAL_MISSING + UPD_FAIL))
+fi
+if [ $UPD_WARN -gt 0 ]; then
+    OPTIONAL_MISSING=$((OPTIONAL_MISSING + UPD_WARN))
+fi
 
 # ---------- Exit code ----------
 
