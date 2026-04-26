@@ -5,6 +5,17 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.28.8] — 2026-04-26
+
+### Fixed (pilot feedback Дмитрий — `/audit-installation` UX)
+
+- **`scripts/iwe-audit.sh` — ложная рекомендация про `scripts/update.sh`.** Старая логика для user-mode требовала `update.sh` в `workspace/scripts/`. Но `update.sh` физически живёт ТОЛЬКО в `FMT-exocortex-template/update.sh` (он сам резолвит `WORKSPACE_DIR=parent of SCRIPT_DIR`), `Step 6` пропагирует в workspace только `.claude/{skills,hooks,rules,...}`, не `scripts/*`. Аналогично `iwe-drift.sh` для user-mode живёт только в FMT-template/scripts/. Фикс: inventory check ищет `update.sh` в `FMT-exocortex-template/`, `iwe-drift.sh` с fallback FMT→workspace. DRIFT_SCRIPT execution тоже фоллбэчит на FMT-template для user-mode.
+- **`audit-installation/SKILL.md` — отчёт писался только в терминал.** Шаг 5 теперь сохраняет полный отчёт + verdict в `$AUDIT_LOG_DIR/iwe-audit-YYYYMMDD-HHMMSS.log`. Логика выбора пути: `$HOME/IWE/scripts/` (author-mode) → `$IWE_SCRIPTS` (user-mode из `~/.iwe-paths`) → `$HOME/IWE` (final fallback). `mkdir -p` гарантирует наличие директории.
+- **`audit-installation/SKILL.md` Шаг 1 — отсутствие fallback при поиске `iwe-audit.sh`.** Прежняя инструкция предписывала `bash $HOME/IWE/scripts/iwe-audit.sh` — для пилота в user-mode (особенно в Docker без `~/.zshenv`, где `$IWE_SCRIPTS` не экспортируется автоматически) скрипт не находился. Добавлена fallback-цепочка `workspace/scripts/` → `$IWE_SCRIPTS` → понятная ошибка с инструкцией `source ~/.iwe-paths` или запустить `setup.sh`.
+
+### Why
+Пилот в Docker на VPS прогнал `/audit-installation`. Получил ложный ❌ про отсутствие `scripts/update.sh` (которого by design не должно быть в workspace), не нашёл лог-файла отчёта, и потенциально упёрся бы в Шаг 1 без `$IWE_SCRIPTS` в env. Урок про placeholder discipline в шаблонных файлах захвачен в memory: при правке файлов в author-mode IWE — только `$IWE_SCRIPTS`/`$IWE_TEMPLATE`/`$HOME`, не хардкод `FMT-exocortex-template/scripts` (валидатор шаблона роняет sync на чеке 6/6).
+
 ## [0.28.7] — 2026-04-26
 
 ### Fixed (sub-agent deep audit, 2 ❌ в migrate-initial-marker.sh)
