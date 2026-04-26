@@ -1,21 +1,65 @@
 #!/bin/bash
 # Validate Template — проверка целостности FMT-exocortex-template
 #
+# Режимы (--mode=...):
+#   pristine  (default) — все 7 проверок. Для CI, author template-sync, fresh clone до setup.sh.
+#   installed           — пропускает чеки 2/3/4, которые легитимно нарушаются после setup.sh
+#                         (/Users/ подставлен, /opt/homebrew в CLAUDE_PATH, MEMORY заполняется работой).
+#                         Используется setup.sh --validate как делегат структурных чеков.
+#
 # 7 проверок:
-# 1. Нет автор-специфичного контента
-# 2. Нет захардкоженных путей /Users/
-# 3. Нет захардкоженных путей /opt/homebrew
-# 4. MEMORY.md — скелет (мало строк в РП-таблице)
-# 5. Обязательные файлы существуют
-# 6. Нет хардкод-путей к FMT-exocortex-template/scripts|roles в протоколах/скиллах (WP-219, DP.FM.009)
-# 7. settings.json hooks ↔ .claude/hooks/ cross-ref (issue #13)
+# 1. Нет автор-специфичного контента                              [pristine + installed]
+# 2. Нет захардкоженных путей /Users/                             [pristine only]
+# 3. Нет захардкоженных путей /opt/homebrew                       [pristine only]
+# 4. MEMORY.md — скелет (мало строк в РП-таблице)                 [pristine only]
+# 5. Обязательные файлы существуют                                [pristine + installed]
+# 6. Нет хардкод-путей к FMT/scripts|roles в протоколах (WP-219)  [pristine + installed]
+# 7. settings.json hooks ↔ .claude/hooks/ cross-ref (issue #13)   [pristine + installed]
 
 set -euo pipefail
 
-TEMPLATE_DIR="${1:-$HOME/IWE/FMT-exocortex-template}"
+# Parse args: --mode=pristine|installed (default pristine) + позиционный TEMPLATE_DIR
+MODE="pristine"
+TEMPLATE_DIR=""
+for arg in "$@"; do
+    case "$arg" in
+        --mode=pristine|--mode=installed) MODE="${arg#--mode=}" ;;
+        --mode=*)
+            echo "ERROR: unknown mode '${arg#--mode=}'. Use --mode=pristine or --mode=installed." >&2
+            exit 2
+            ;;
+        --help|-h)
+            echo "Usage: validate-template.sh [--mode=pristine|installed] [TEMPLATE_DIR]"
+            echo "  Default mode: pristine (CI, author sync, fresh clone)"
+            echo "  Use --mode=installed for post-setup checks (skips placeholder-substitution-related rules)."
+            exit 0
+            ;;
+        *) [ -z "$TEMPLATE_DIR" ] && TEMPLATE_DIR="$arg" ;;
+    esac
+done
+TEMPLATE_DIR="${TEMPLATE_DIR:-$HOME/IWE/FMT-exocortex-template}"
 FAIL=0
 
-echo "=== Validating: $TEMPLATE_DIR ==="
+# Guard: post-setup state + default pristine mode → подсказать installed-режим и выйти.
+# Детектор стабильный: {{HOME_DIR}} в pristine FMT/CLAUDE.md гарантирован (используется в §4 Memory + §9 Авторское).
+if [ "$MODE" = "pristine" ] \
+   && [ -f "$TEMPLATE_DIR/CLAUDE.md" ] \
+   && ! grep -q '{{HOME_DIR}}' "$TEMPLATE_DIR/CLAUDE.md" 2>/dev/null; then
+    echo "ВНИМАНИЕ: FMT обработан setup.sh (плейсхолдер {{HOME_DIR}} в CLAUDE.md уже подставлен)."
+    echo ""
+    echo "Pristine-режим (default) применим к:"
+    echo "  • CI (.github/workflows/validate-template.yml)"
+    echo "  • Author template-sync (перед commit FMT)"
+    echo "  • Свежий clone ДО запуска setup.sh"
+    echo ""
+    echo "Для проверки установленного workspace используйте один из:"
+    echo "  bash setup.sh --validate                              # env + структурные чеки (делегат)"
+    echo "  bash setup/validate-template.sh --mode=installed      # явно installed (4 универсальных чека)"
+    echo "  /audit-installation                                   # полный аудит (Claude Code skill)"
+    exit 0
+fi
+
+echo "=== Validating: $TEMPLATE_DIR (mode=$MODE) ==="
 
 # Утилита: подсчёт совпадений grep (безопасно с pipefail)
 grep_count() {
@@ -67,64 +111,76 @@ for pattern in "@aist_me_bot" "digital-twin" "content-pipeline" \
 done
 [ "$CHECK1_FAIL" -eq 0 ] && echo "PASS"
 
-# 2. Нет захардкоженных /Users/ путей (исключаем: шаблонные /Users/.../,
-#    validate-template.sh (мета-проверки), setup.sh (примеры вида /Users/alice/))
+# 2. Нет захардкоженных /Users/ путей [pristine only]
+# В installed-режиме setup.sh легитимно подставил $WORKSPACE_DIR → /Users/<user>/...
 echo -n "[2/5] Hardcoded /Users/ paths... "
-count=$(grep -rn '/Users/' "$TEMPLATE_DIR" --include="*.md" --include="*.sh" \
-        --include="*.json" --include="*.plist" \
-        --exclude='validate-template.sh' --exclude='setup.sh' \
-        --exclude='CHANGELOG.md' 2>/dev/null \
-        | grep -v '/Users/\.\.\./' \
-        | grep -v '# .*\(/Users/\|e\.g\.\)' \
-        | wc -l | tr -d ' ' || true)
-if [ "$count" -gt 0 ]; then
-    echo "FAIL ($count hits)"
-    grep -rn '/Users/' "$TEMPLATE_DIR" --include="*.md" --include="*.sh" \
-        --exclude='validate-template.sh' --exclude='setup.sh' \
-        --exclude='CHANGELOG.md' 2>/dev/null \
-        | grep -v '/Users/\.\.\./' \
-        | grep -v '# .*\(/Users/\|e\.g\.\)' | head -3 || true
-    FAIL=1
+if [ "$MODE" = "installed" ]; then
+    echo "SKIP (installed mode — /Users/ подставлен setup'ом)"
 else
-    echo "PASS"
-fi
-
-# 3. Нет захардкоженных /opt/homebrew путей (кроме README, CI, PATH в plist,
-#    validate-template.sh (мета-проверки), setup.sh (fallback default),
-#    PLATFORM-COMPAT.md (документация о совместимости))
-echo -n "[3/5] Hardcoded /opt/homebrew paths... "
-count=$(grep -rn '/opt/homebrew' "$TEMPLATE_DIR" --include="*.md" --include="*.sh" \
-        --include="*.json" --include="*.plist" \
-        --exclude='validate-template.sh' --exclude='setup.sh' 2>/dev/null \
-        | grep -v 'README.md' \
-        | grep -v 'PLATFORM-COMPAT.md' \
-        | grep -v 'validate-template.yml' \
-        | grep -v '/usr/local/bin.*:/opt/homebrew' \
-        | wc -l | tr -d ' ' || true)
-if [ "$count" -gt 0 ]; then
-    echo "FAIL ($count hits)"
-    grep -rn '/opt/homebrew' "$TEMPLATE_DIR" --include="*.md" --include="*.sh" \
-        --exclude='validate-template.sh' --exclude='setup.sh' 2>/dev/null \
-        | grep -v 'README.md' | grep -v 'PLATFORM-COMPAT.md' \
-        | grep -v 'validate-template.yml' | head -3 || true
-    FAIL=1
-else
-    echo "PASS"
-fi
-
-# 4. MEMORY.md — скелет (≤15 строк в таблице)
-echo -n "[4/5] MEMORY.md is skeleton... "
-MEMORY_FILE="$TEMPLATE_DIR/memory/MEMORY.md"
-if [ -f "$MEMORY_FILE" ]; then
-    rp_rows=$(grep -c '^|' "$MEMORY_FILE" 2>/dev/null || true); rp_rows=${rp_rows:-0}
-    if [ "$rp_rows" -gt 15 ]; then
-        echo "FAIL ($rp_rows table rows, expected ≤15)"
+    count=$(grep -rn '/Users/' "$TEMPLATE_DIR" --include="*.md" --include="*.sh" \
+            --include="*.json" --include="*.plist" \
+            --exclude='validate-template.sh' --exclude='setup.sh' \
+            --exclude='CHANGELOG.md' 2>/dev/null \
+            | grep -v '/Users/\.\.\./' \
+            | grep -v '# .*\(/Users/\|e\.g\.\)' \
+            | wc -l | tr -d ' ' || true)
+    if [ "$count" -gt 0 ]; then
+        echo "FAIL ($count hits)"
+        grep -rn '/Users/' "$TEMPLATE_DIR" --include="*.md" --include="*.sh" \
+            --exclude='validate-template.sh' --exclude='setup.sh' \
+            --exclude='CHANGELOG.md' 2>/dev/null \
+            | grep -v '/Users/\.\.\./' \
+            | grep -v '# .*\(/Users/\|e\.g\.\)' | head -3 || true
         FAIL=1
     else
-        echo "PASS ($rp_rows rows)"
+        echo "PASS"
     fi
+fi
+
+# 3. Нет захардкоженных /opt/homebrew путей [pristine only]
+# В installed-режиме CLAUDE_PATH=/opt/homebrew/bin/claude — легитимная подстановка.
+echo -n "[3/5] Hardcoded /opt/homebrew paths... "
+if [ "$MODE" = "installed" ]; then
+    echo "SKIP (installed mode — CLAUDE_PATH может быть /opt/homebrew/...)"
 else
-    echo "WARN (file missing)"
+    count=$(grep -rn '/opt/homebrew' "$TEMPLATE_DIR" --include="*.md" --include="*.sh" \
+            --include="*.json" --include="*.plist" \
+            --exclude='validate-template.sh' --exclude='setup.sh' 2>/dev/null \
+            | grep -v 'README.md' \
+            | grep -v 'PLATFORM-COMPAT.md' \
+            | grep -v 'validate-template.yml' \
+            | grep -v '/usr/local/bin.*:/opt/homebrew' \
+            | wc -l | tr -d ' ' || true)
+    if [ "$count" -gt 0 ]; then
+        echo "FAIL ($count hits)"
+        grep -rn '/opt/homebrew' "$TEMPLATE_DIR" --include="*.md" --include="*.sh" \
+            --exclude='validate-template.sh' --exclude='setup.sh' 2>/dev/null \
+            | grep -v 'README.md' | grep -v 'PLATFORM-COMPAT.md' \
+            | grep -v 'validate-template.yml' | head -3 || true
+        FAIL=1
+    else
+        echo "PASS"
+    fi
+fi
+
+# 4. MEMORY.md — скелет (≤15 строк в таблице) [pristine only]
+# В installed-режиме MEMORY заполняется работой пользователя (РП, заметки).
+echo -n "[4/5] MEMORY.md is skeleton... "
+if [ "$MODE" = "installed" ]; then
+    echo "SKIP (installed mode — MEMORY заполняется работой)"
+else
+    MEMORY_FILE="$TEMPLATE_DIR/memory/MEMORY.md"
+    if [ -f "$MEMORY_FILE" ]; then
+        rp_rows=$(grep -c '^|' "$MEMORY_FILE" 2>/dev/null || true); rp_rows=${rp_rows:-0}
+        if [ "$rp_rows" -gt 15 ]; then
+            echo "FAIL ($rp_rows table rows, expected ≤15)"
+            FAIL=1
+        else
+            echo "PASS ($rp_rows rows)"
+        fi
+    else
+        echo "WARN (file missing)"
+    fi
 fi
 
 # 5. Обязательные файлы
