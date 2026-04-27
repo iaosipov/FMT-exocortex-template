@@ -151,7 +151,7 @@ cleanup_state() {
 # Разделяет архивацию (мгновенно) и генерацию (15+ мин Claude Code).
 # Гарантирует: даже если генерация ещё не началась, старый план не висит в current/.
 pre_archive_dayplan() {
-    local strategy_dir="{{WORKSPACE_DIR}}/DS-strategy"
+    local strategy_dir="{{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}"
     local archive_dir="$strategy_dir/archive/day-plans"
     local moved=0
 
@@ -184,6 +184,23 @@ pre_archive_dayplan() {
 # === Диспетчер ===
 
 dispatch() {
+    # WP-273 0.29.4 R6.5: self-reentrancy guard. Если предыдущий dispatch ещё работает
+    # (Claude CLI 30 мин), launchd может запустить следующий — двойной morning strategist.
+    # Используем flock на $STATE_DIR/scheduler.lock (non-blocking: новый dispatch выходит сразу).
+    if command -v flock >/dev/null 2>&1; then
+        exec 8>"$STATE_DIR/scheduler.lock"
+        if ! flock -n 8; then
+            log "SKIP: another scheduler dispatch уже работает (flock contended)"
+            return 0
+        fi
+    fi
+
+    # WP-273 0.29.4 R6.3: shared lock на runtime swap — ждём если build-runtime в процессе.
+    if command -v flock >/dev/null 2>&1 && [ -f "${IWE_WORKSPACE:-$HOME/IWE}/.iwe-runtime.lock" ]; then
+        exec 7>"${IWE_WORKSPACE:-$HOME/IWE}/.iwe-runtime.lock"
+        flock -s -w 5 7 2>/dev/null || log "WARN: runtime lock contended >5s — proceeding (read paths могут быть устаревшими)"
+    fi
+
     log "dispatch started (hour=$HOUR, dow=$DOW)"
     local ran=0
 

@@ -121,7 +121,7 @@ $extra_args"
     log "Completed process: $command_file"
 
     # Commit + push changes (отчёты, помеченные captures)
-    local strategy_dir="$WORKSPACE/DS-strategy"
+    local strategy_dir="$WORKSPACE/{{GOVERNANCE_REPO}}"
 
     if [ -d "$strategy_dir/.git" ]; then
         # Очистить staging area
@@ -165,7 +165,7 @@ case "$1" in
         fi
 
         # Быстрая проверка: есть ли captures в inbox
-        CAPTURES_FILE="$WORKSPACE/DS-strategy/inbox/captures.md"
+        CAPTURES_FILE="$WORKSPACE/{{GOVERNANCE_REPO}}/inbox/captures.md"
         if [ -f "$CAPTURES_FILE" ]; then
             # Маркеры имеют вид `[analyzed 2026-MM-DD]`, `[processed 2026-MM-DD]`, `[duplicate]`, `[defer]` —
             # используем `\b` (word boundary), а не `\]`, чтобы ловить датированные маркеры.

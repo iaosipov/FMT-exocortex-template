@@ -458,11 +458,18 @@ ENVEOF
     done
 fi
 
-# Check remaining placeholders
-REMAINING=$(grep -rl '{{[A-Z_]*}}' "$SCRIPT_DIR" --include="*.md" --include="*.sh" --include="*.json" --include="*.yaml" --include="*.yml" 2>/dev/null | wc -l | tr -d ' ')
-if [ "$REMAINING" -gt 0 ]; then
-    echo "  ⚠ $REMAINING файлов содержат незаменённые переменные."
-    echo "  Проверьте .exocortex.env и перезапустите: bash update.sh"
+# Check remaining placeholders.
+# WP-273 0.29.4 R6.2 fix: раньше сканировали $SCRIPT_DIR (FMT) — но в FMT
+# плейсхолдеры это by design (clean upstream). Получали навсегда «⚠ 54 файлов
+# содержат незаменённые переменные» у каждого пилота на каждом update.
+# Проверяем теперь .iwe-runtime/ — там их быть не должно после build-runtime.
+RUNTIME_CHECK_DIR="${WORKSPACE_DIR}/.iwe-runtime"
+if [ -d "$RUNTIME_CHECK_DIR" ]; then
+    REMAINING=$(grep -rl '{{[A-Z_]*}}' "$RUNTIME_CHECK_DIR" --include="*.md" --include="*.sh" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.plist" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$REMAINING" -gt 0 ]; then
+        echo "  ⚠ $REMAINING файлов в .iwe-runtime/ содержат незаменённые переменные."
+        echo "  Проверьте .exocortex.env (значения placeholders) и перезапустите: bash $SCRIPT_DIR/setup/build-runtime.sh"
+    fi
 fi
 
 # === Step 6: Reinstall platform-space ===
@@ -724,7 +731,9 @@ fi
 # === Step 7.5: Migration hint — initial-marker для old clones (0.28.5+) ===
 # Если у пользователя есть Strategy.md без маркера IWE-INITIAL-NEEDED — намекнуть.
 # Это для пользователей, склонировавших до 0.28.5 (skeleton-marker появился в 0.28.5).
-ENV_FILE="$SCRIPT_DIR/.exocortex.env"
+# WP-273 0.29.4 R6.4 fix: после WP-273 .exocortex.env живёт в workspace, не в FMT.
+# Раньше использовали $SCRIPT_DIR (FMT) → файла там нет → hint никогда не показывался.
+ENV_FILE="${WORKSPACE_DIR}/.exocortex.env"
 if [ -f "$ENV_FILE" ]; then
     ENV_WS=$(grep -E '^WORKSPACE_DIR=' "$ENV_FILE" | head -1 | cut -d= -f2-)
     ENV_GOV=$(grep -E '^GOVERNANCE_REPO=' "$ENV_FILE" | head -1 | cut -d= -f2-)

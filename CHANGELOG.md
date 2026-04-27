@@ -5,6 +5,33 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.4] — 2026-04-27
+
+### Fixed (proactive audit — 5 нового класса проблем до Round 6)
+
+После релиза 0.29.3 запустили adversarial sub-agent с мандатом «найди новый класс, который пропустили Round 4-5». Найдено 5 классов, все НЕ повторение R4.x/R5.x. Закрываем превентивно.
+
+- **R6.1 BLOCKER — `GOVERNANCE_REPO` dead placeholder.** Плейсхолдер был зарегистрирован в overlay, но в 7 substituted-файлах путь `/DS-strategy` был **захардкожен**: `roles/synchronizer/scripts/{scheduler,daily-report,dt-collect,code-scan}.sh`, `roles/synchronizer/scripts/templates/{strategist,extractor}.sh`, `roles/strategist/scripts/strategist.sh`, `roles/extractor/scripts/extractor.sh`. Любой пилот с нестандартным именем хаба (например `DS-pilot-strategy`) — автоматизация молча обращается не туда. Заменил все хардкоды на `{{GOVERNANCE_REPO}}`. Авторский кейс (`DS-my-strategy`) — тот же класс.
+
+- **R6.2 BLOCKER — permanent false-positive в `update.sh:462`.** `grep -rl '{{...}}' "$SCRIPT_DIR"` сканировал FMT, где плейсхолдеры это by design (clean upstream). Каждый запуск `update.sh` у каждого пилота заканчивался «⚠ 54 файлов содержат незаменённые переменные» — UX-катастрофа, разрушает доверие. Сканируем теперь `$WORKSPACE_DIR/.iwe-runtime/` — там их быть не должно после build-runtime.
+
+- **R6.3 IMPORTANT — race window в `build-runtime.sh:338-344`.** Окно между `mv RUNTIME → RUNTIME.old.$$` и `mv $BUILD_DIR/runtime → RUNTIME` — `$RUNTIME_DIR` не существует. Если в этот момент scheduler dispatch'ится — обращается к runner-пути → fail или silent skip. Добавил `flock -x -w 30` на `$WORKSPACE_DIR/.iwe-runtime.lock` в build-runtime + shared `flock -s -w 5` в scheduler перед чтением runner-путей.
+
+- **R6.4 IMPORTANT — `update.sh:734` Step 7.5 regression.** После WP-273 `.exocortex.env` живёт в workspace. Step 7.5 переприсваивал `ENV_FILE="$SCRIPT_DIR/.exocortex.env"` (FMT, где файла нет) — `if [ -f ... ]` всегда false → migration hint про `IWE-INITIAL-NEEDED` никогда не показывался пилотам с старым Strategy.md skeleton. Используем `${WORKSPACE_DIR}/.exocortex.env`.
+
+- **R6.5 NICE-TO-HAVE — scheduler self-reentrancy.** Если предыдущий dispatch завис на 30 мин (Claude CLI), launchd запускал следующий — двойной morning strategist, двойные коммиты. Добавил non-blocking `flock -n 8` на `$STATE_DIR/scheduler.lock` в `dispatch()` — новый dispatch выходит сразу с лог-сообщением.
+
+### Changed (smoke-test расширен 6 → 9 тестов)
+
+Добавлены regression guards для R6.x:
+- Test 6a: `GOVERNANCE_REPO=DS-pilot-strategy` подставляется в `.iwe-runtime/` (не остаётся literal `DS-strategy`).
+- Test 6b: 0 leftover placeholders в `.iwe-runtime/`.
+
+Заодно пофиксили баг самого smoke-test: `... | head -1 >/dev/null` always-exit-0 → false-positive FAIL. Заменено на `[ -n "$VAR" ]`.
+
+### Why
+Архитектурный паттерн «найди до того как Евгений найдёт» — proactive search. Sub-agent post-release verify 0.29.2 предсказал «1-2 проблемы из нового класса максимум». Реальность: 5 проблем (2 blocker, 2 important, 1 nice). Подтверждает ценность adversarial review до релиза. WP-273 Этап 4 (proactive audit pass).
+
 ## [0.29.3] — 2026-04-27
 
 ### Added (Этап 3 WP-273 — test coverage + observability)

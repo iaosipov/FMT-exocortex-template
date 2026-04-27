@@ -126,6 +126,48 @@ else
     fail "install.sh не сработал fail-fast при env -i: $INSTALL_OUT"
 fi
 
+# === Test 6a: GOVERNANCE_REPO substituted (R6.1 regression guard) ===
+echo "[6a] GOVERNANCE_REPO в substituted-файлах (R6.1 regression)..."
+# Setup test workspace с НЕстандартным governance repo, проверим что подставился.
+cat > "$TEST_WS/.exocortex.env" <<EOF2
+GITHUB_USER=smoke-test
+WORKSPACE_DIR=$TEST_WS
+CLAUDE_PATH=/usr/local/bin/claude
+CLAUDE_PROJECT_SLUG=smoke-test
+TIMEZONE_HOUR=4
+TIMEZONE_DESC=4:00 UTC
+HOME_DIR=$TEST_WS
+GOVERNANCE_REPO=DS-pilot-strategy
+IWE_TEMPLATE=$TEMPLATE_DIR
+IWE_RUNTIME=$TEST_WS/.iwe-runtime
+EOF2
+chmod 600 "$TEST_WS/.exocortex.env"
+bash "$TEMPLATE_DIR/setup/build-runtime.sh" --workspace "$TEST_WS" --env-file "$TEST_WS/.exocortex.env" --quiet 2>&1 >/dev/null
+# Проверяем что DS-pilot-strategy подставлен в substituted файлы (раньше был хардкод DS-strategy)
+if grep -rq 'DS-pilot-strategy' "$TEST_WS/.iwe-runtime/roles/" 2>/dev/null; then
+    pass "GOVERNANCE_REPO=DS-pilot-strategy подставлен в .iwe-runtime/"
+else
+    fail "GOVERNANCE_REPO не подставлен — хардкод DS-strategy остался (R6.1 regression)"
+fi
+# Дополнительно: НЕ должно быть literal /DS-strategy/ в .iwe-runtime/ (если только не GOVERNANCE_REPO=DS-strategy).
+# Bash gotcha: `... | head -1 >/dev/null` всегда exit 0 даже на пустом stdin.
+# Используем grep -q . — true ТОЛЬКО если есть хоть один матч.
+LITERAL_HARDCODES=$(grep -rE '/DS-strategy[/"]' "$TEST_WS/.iwe-runtime/roles/" 2>/dev/null | grep -v ':#' || true)
+if [ -n "$LITERAL_HARDCODES" ]; then
+    fail "literal /DS-strategy/ остался в runtime (хардкод не убран): $LITERAL_HARDCODES"
+else
+    pass "no literal /DS-strategy/ в runtime"
+fi
+
+# === Test 6b: REMAINING placeholder check sanity (R6.2 regression guard) ===
+echo "[6b] no leftover placeholders в .iwe-runtime/ после build-runtime..."
+LEFTOVER_COUNT=$(grep -rl '{{[A-Z_]*}}' "$TEST_WS/.iwe-runtime" 2>/dev/null | wc -l | tr -d ' ')
+if [ "$LEFTOVER_COUNT" -eq 0 ]; then
+    pass "0 leftover placeholders в runtime"
+else
+    fail "$LEFTOVER_COUNT файлов в runtime содержат {{...}}"
+fi
+
 # === Test 6: install.sh С env проходит fail-fast check ===
 echo "[6/6] install.sh с env проходит fail-fast (positive case)..."
 # Запускаем с правильным env. launchctl load может зафейлить (нет launchd на CI),

@@ -15,7 +15,9 @@ command -v caffeinate >/dev/null 2>&1 && caffeinate -diu -w $$ &
 # Архитектурный принцип: substituted в runtime, read-only из FMT через $IWE_TEMPLATE.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
-WORKSPACE="$HOME/IWE/DS-strategy"
+# WP-273 0.29.4 R6.1 fix: было хардкоженое имя governance-репо.
+# Теперь подставляются плейсхолдеры из .exocortex.env через build-runtime.
+WORKSPACE="{{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}"
 
 # PROMPTS_DIR резолв: $IWE_TEMPLATE (Generated runtime) → $HOME/IWE/FMT-exocortex-template (default) → relative (legacy fallback)
 if [ -n "${IWE_TEMPLATE:-}" ] && [ -d "$IWE_TEMPLATE/roles/strategist/prompts" ]; then
