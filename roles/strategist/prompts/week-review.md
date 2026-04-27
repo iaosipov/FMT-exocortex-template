@@ -7,7 +7,7 @@
 
 ## Контекст
 
-- **WeekPlan:** {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/current/WeekPlan W*.md
+- **WeekPlan:** {{WORKSPACE_DIR}}/DS-strategy/current/WeekPlan W*.md
 
 ## Алгоритм
 
@@ -19,7 +19,7 @@ git -C {{WORKSPACE_DIR}}/<repo> log --since="last monday 00:00" --until="today 0
 ```
 
 - Пройди по ВСЕМ репозиториям в `{{WORKSPACE_DIR}}/`
-- Загрузи текущий WeekPlan из `{{GOVERNANCE_REPO}}/current/`
+- Загрузи текущий WeekPlan из `DS-strategy/current/`
 - Сопоставь коммиты с РП из WeekPlan
 - Определи статус каждого РП: done / partial / not started
 
@@ -59,10 +59,10 @@ git -C {{WORKSPACE_DIR}}/<repo> log --since="last monday 00:00" --until="today 0
 
 > **WeekReport как отдельный файл НЕ создаётся.** Итоги записываются в секцию WeekPlan.
 
-1. Открой текущий `{{GOVERNANCE_REPO}}/current/WeekPlan W{N}*.md`
+1. Открой текущий `DS-strategy/current/WeekPlan W{N}*.md`
 2. Найди или создай секцию `## Итоги W{N}` (после frontmatter, перед планом)
 3. Запиши туда: метрики, таблицу по репо, статусы РП, инсайты, carry-over, контент-план
-4. Закоммить в {{GOVERNANCE_REPO}}
+4. Закоммить в DS-strategy
 
 ### 6. Создать пост для клуба (авто-публикация)
 
@@ -144,7 +144,7 @@ content_plan: null
 
 > **ОБЯЗАТЕЛЬНО.** После создания поста — записать ссылку в WeekPlan текущей недели.
 
-1. Открой текущий `{{GOVERNANCE_REPO}}/current/WeekPlan W{N}*.md`
+1. Открой текущий `DS-strategy/current/WeekPlan W{N}*.md`
 2. Найди секцию «Контент-план W{N}» (или создай, если нет)
 3. Добавь строку:
 

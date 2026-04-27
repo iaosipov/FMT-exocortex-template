@@ -9,9 +9,9 @@
 
 ## Контекст
 
-- **WeekPlan:** {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/current/WeekPlan W*.md (последний по дате)
+- **WeekPlan:** {{WORKSPACE_DIR}}/DS-strategy/current/WeekPlan W*.md (последний по дате)
 - **MEMORY:** ~/.claude/projects/{{CLAUDE_PROJECT_SLUG}}/memory/MEMORY.md
-- **Exocortex backup:** {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/exocortex/
+- **Exocortex backup:** {{WORKSPACE_DIR}}/DS-strategy/exocortex/
 
 ## Алгоритм
 
@@ -30,7 +30,7 @@ git -C {{WORKSPACE_DIR}}/<repo> log --since="today 00:00" --oneline --no-merges
 
 ### 2. Обновить WeekPlan
 
-Найди текущий `WeekPlan W*.md` в `{{GOVERNANCE_REPO}}/current/` и обнови:
+Найди текущий `WeekPlan W*.md` в `DS-strategy/current/` и обнови:
 
 - Пометь завершённые РП как **done**
 - Обнови статусы partial с описанием прогресса
@@ -46,20 +46,20 @@ git -C {{WORKSPACE_DIR}}/<repo> log --since="today 00:00" --oneline --no-merges
 
 ### 4. Backup экзокортекса
 
-Скопируй актуальные файлы в `{{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/exocortex/`:
+Скопируй актуальные файлы в `{{WORKSPACE_DIR}}/DS-strategy/exocortex/`:
 
 ```bash
 # Корневой CLAUDE.md
-cp {{WORKSPACE_DIR}}/CLAUDE.md {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/exocortex/CLAUDE.md
+cp {{WORKSPACE_DIR}}/CLAUDE.md {{WORKSPACE_DIR}}/DS-strategy/exocortex/CLAUDE.md
 
 # Memory (Слой 3)
-cp ~/.claude/projects/{{CLAUDE_PROJECT_SLUG}}/memory/MEMORY.md {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/exocortex/MEMORY.md
-cp ~/.claude/projects/{{CLAUDE_PROJECT_SLUG}}/memory/*.md {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/exocortex/
+cp ~/.claude/projects/{{CLAUDE_PROJECT_SLUG}}/memory/MEMORY.md {{WORKSPACE_DIR}}/DS-strategy/exocortex/MEMORY.md
+cp ~/.claude/projects/{{CLAUDE_PROJECT_SLUG}}/memory/*.md {{WORKSPACE_DIR}}/DS-strategy/exocortex/
 ```
 
 ### 5. Закоммитить
 
-- Закоммить все изменения в `{{GOVERNANCE_REPO}}` (WeekPlan + exocortex backup)
+- Закоммить все изменения в `DS-strategy` (WeekPlan + exocortex backup)
 - Запуши
 
 ## Правила
