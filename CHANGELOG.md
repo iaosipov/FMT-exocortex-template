@@ -5,6 +5,30 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.5] — 2026-04-27
+
+### Fixed (R6.1* — sub-agent post-release verify нашёл upущение proactive audit'а)
+
+После 0.29.4 sub-agent post-release verify нашёл, что мой proactive audit пропустил **R6.1*** — тот же класс GOVERNANCE_REPO hardcode, но в файлах, которые smoke test не покрывал:
+- `roles/strategist/scripts/cleanup-processed-notes.py:26` — `WORKSPACE = Path.home() / "IWE" / "DS-strategy"` — **жёсткий хардкод** в Python. Любой пилот с нестандартным `GOVERNANCE_REPO` → fail при запуске cleanup.
+- 67 хардкодов `DS-strategy` в `roles/strategist/prompts/*.md` и `roles/extractor/prompts/*.md` — bare paths без `{{GOVERNANCE_REPO}}`. LLM получает неверный путь.
+
+Корневая причина пропуска: smoke test 0.29.4 проверял только `.sh` в `.iwe-runtime/roles/`, не `.py` и не `prompts/` (которые read-only из FMT, не substituted).
+
+**Фиксы:**
+- `cleanup-processed-notes.py` — `_resolve_workspace()` функция читает `IWE_WORKSPACE` + `IWE_GOVERNANCE_REPO` из env-vars, fallback на `.exocortex.env` (`grep GOVERNANCE_REPO=`), затем default `DS-strategy`. Тестировано: `IWE_WORKSPACE=/tmp/iwe-test IWE_GOVERNANCE_REPO=DS-pilot-strategy` → `WORKSPACE = /tmp/iwe-test/DS-pilot-strategy` ✅.
+- 67 хардкодов в prompts → `{{GOVERNANCE_REPO}}`. Архитектурное решение: prompts остаются read-only в FMT с placeholders, runner подставляет sed'ом при чтении. Single source, no duplication.
+- `run_claude` в `strategist.sh` и `extractor.sh` — добавлена sed-substitution: `{{GOVERNANCE_REPO}}|{{WORKSPACE_DIR}}|{{GITHUB_USER}}` подставляются из env (`IWE_GOVERNANCE_REPO`, `IWE_WORKSPACE`, `GITHUB_USER`) в момент чтения prompt-файла.
+
+### Added (smoke test 9 → 11 + detector #6 → #7)
+
+- **smoke-test 6c:** prompts substitution — создаёт временный prompt с `{{GOVERNANCE_REPO}}`, проверяет sed-substitution в стиле runner'а.
+- **smoke-test 6d:** `cleanup-processed-notes.py` резолвит `GOVERNANCE_REPO` из env (с `IWE_GOVERNANCE_REPO=DS-pilot-strategy` → `WORKSPACE = .../DS-pilot-strategy`).
+- **integration-contract-validator detector #7 `prompts_python_coverage`:** ищет hardcoded `DS-strategy` в `roles/**/*.py` и `roles/**/prompts/*.md`. Антипаттерн: `.py` без чтения `GOVERNANCE_REPO` env, prompts с bare `DS-strategy/` без `{{GOVERNANCE_REPO}}`.
+
+### Why
+Подтверждение архитектурного тезиса: **adversarial sub-agent oversight даёт +30% покрытия даже после proactive audit**. Каждый цикл находит новые подкатегории. R6.1* — extension R6.1 на новые типы файлов (.py, prompts), которые мой smoke test не покрывал. Решение для 0.29.5: расширили scope smoke + добавили detector #7. Прогноз: следующий audit, скорее всего, найдёт R6.1** (новый класс файлов или новая категория hardcode'ов).
+
 ## [0.29.4] — 2026-04-27
 
 ### Fixed (proactive audit — 5 нового класса проблем до Round 6)

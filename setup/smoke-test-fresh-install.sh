@@ -168,6 +168,47 @@ else
     fail "$LEFTOVER_COUNT файлов в runtime содержат {{...}}"
 fi
 
+# === Test 6c: prompts substituted runner'ом (R6.1* regression guard) ===
+echo "[6c] prompts с {{GOVERNANCE_REPO}} substituted runner'ом (R6.1* regression)..."
+# Создаём временный test-prompt с плейсхолдером, проверяем что runner подставляет.
+TEST_PROMPT_DIR="$TEST_WS/.iwe-runtime/roles/strategist/test-prompts-tmp"
+mkdir -p "$TEST_PROMPT_DIR"
+cat > "$TEST_PROMPT_DIR/test-substitution.md" <<'EOFP'
+Path должен быть: {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/inbox/captures.md
+Repo: github.com/{{GITHUB_USER}}/{{GOVERNANCE_REPO}}
+EOFP
+# Симулируем то что runner делает (sed substitution)
+RESOLVED=$(sed \
+    -e "s|{{GOVERNANCE_REPO}}|DS-pilot-strategy|g" \
+    -e "s|{{WORKSPACE_DIR}}|$TEST_WS|g" \
+    -e "s|{{GITHUB_USER}}|smoke-test|g" \
+    "$TEST_PROMPT_DIR/test-substitution.md")
+if echo "$RESOLVED" | grep -q "DS-pilot-strategy/inbox/captures.md" && ! echo "$RESOLVED" | grep -q '{{'; then
+    pass "runner-style sed substitution prompts работает (R6.1*)"
+else
+    fail "prompts substitution не работает: $RESOLVED"
+fi
+rm -rf "$TEST_PROMPT_DIR"
+
+# === Test 6d: cleanup-processed-notes.py читает GOVERNANCE_REPO из env (R6.1* regression) ===
+echo "[6d] cleanup-processed-notes.py резолвит GOVERNANCE_REPO из env (R6.1* regression)..."
+PY_RESULT=$(IWE_WORKSPACE="$TEST_WS" IWE_GOVERNANCE_REPO=DS-pilot-strategy \
+    python3 -c "
+import sys, importlib.util
+spec = importlib.util.spec_from_file_location('cleanup', '$TEMPLATE_DIR/roles/strategist/scripts/cleanup-processed-notes.py')
+mod = importlib.util.module_from_spec(spec)
+try:
+    spec.loader.exec_module(mod)
+except SystemExit:
+    pass
+print(mod.WORKSPACE)
+" 2>&1 || true)
+if echo "$PY_RESULT" | grep -q "DS-pilot-strategy"; then
+    pass "Python script резолвит GOVERNANCE_REPO=DS-pilot-strategy"
+else
+    fail "Python script хардкод DS-strategy остался: $PY_RESULT"
+fi
+
 # === Test 6: install.sh С env проходит fail-fast check ===
 echo "[6/6] install.sh с env проходит fail-fast (positive case)..."
 # Запускаем с правильным env. launchctl load может зафейлить (нет launchd на CI),

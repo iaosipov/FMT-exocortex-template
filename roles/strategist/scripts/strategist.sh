@@ -101,9 +101,18 @@ run_claude() {
         exit 1
     fi
 
-    # Читаем содержимое команды
+    # Читаем содержимое команды.
+    # WP-273 0.29.5 R6.1*: prompts в FMT остаются с {{...}} (read-only, single source).
+    # Runner подставляет плейсхолдеры в момент чтения — LLM получает реальные имена.
     local prompt
-    prompt=$(cat "$command_path")
+    local _gov_repo="${IWE_GOVERNANCE_REPO:-DS-strategy}"
+    local _ws="${IWE_WORKSPACE:-$HOME/IWE}"
+    local _gh_user="${GITHUB_USER:-your-username}"
+    prompt=$(sed \
+        -e "s|{{GOVERNANCE_REPO}}|$_gov_repo|g" \
+        -e "s|{{WORKSPACE_DIR}}|$_ws|g" \
+        -e "s|{{GITHUB_USER}}|$_gh_user|g" \
+        "$command_path")
 
     # Inject current date + day of week (prevents LLM calendar arithmetic errors)
     local ru_date_context

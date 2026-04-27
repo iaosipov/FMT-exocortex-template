@@ -96,8 +96,16 @@ run_claude() {
         exit 1
     fi
 
+    # WP-273 0.29.5 R6.1*: prompts в FMT с {{...}}, runner substitute'ит при чтении.
     local prompt
-    prompt=$(cat "$command_path")
+    local _gov_repo="${IWE_GOVERNANCE_REPO:-DS-strategy}"
+    local _ws="${IWE_WORKSPACE:-$HOME/IWE}"
+    local _gh_user="${GITHUB_USER:-your-username}"
+    prompt=$(sed \
+        -e "s|{{GOVERNANCE_REPO}}|$_gov_repo|g" \
+        -e "s|{{WORKSPACE_DIR}}|$_ws|g" \
+        -e "s|{{GITHUB_USER}}|$_gh_user|g" \
+        "$command_path")
 
     # Добавить extra args к промпту
     if [ -n "$extra_args" ]; then
