@@ -102,16 +102,19 @@ run_claude() {
     fi
 
     # Читаем содержимое команды.
-    # WP-273 0.29.5 R6.1*: prompts в FMT остаются с {{...}} (read-only, single source).
-    # Runner подставляет плейсхолдеры в момент чтения — LLM получает реальные имена.
+    # WP-273 0.29.6 R6.1**: build-runtime подменял плейсхолдеры в этих sed-выражениях
+    # → runner становился сломан после build (искал значение в промпте вместо плейсхолдера).
+    # Escape: собираем двойно-фигурные токены через bash-конкатенацию — build-runtime sed
+    # не находит цельный паттерн и не трогает.
     local prompt
     local _gov_repo="${IWE_GOVERNANCE_REPO:-DS-strategy}"
     local _ws="${IWE_WORKSPACE:-$HOME/IWE}"
     local _gh_user="${GITHUB_USER:-your-username}"
+    local _o='{''{' _c='}''}'  # escape: build-runtime ищет цельный двойно-фигурный токен с UPPER_NAME внутри, поэтому конкатенация одиночных скобок его не матчит
     prompt=$(sed \
-        -e "s|{{GOVERNANCE_REPO}}|$_gov_repo|g" \
-        -e "s|{{WORKSPACE_DIR}}|$_ws|g" \
-        -e "s|{{GITHUB_USER}}|$_gh_user|g" \
+        -e "s|${_o}GOVERNANCE_REPO${_c}|$_gov_repo|g" \
+        -e "s|${_o}WORKSPACE_DIR${_c}|$_ws|g" \
+        -e "s|${_o}GITHUB_USER${_c}|$_gh_user|g" \
         "$command_path")
 
     # Inject current date + day of week (prevents LLM calendar arithmetic errors)

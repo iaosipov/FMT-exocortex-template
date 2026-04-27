@@ -96,15 +96,18 @@ run_claude() {
         exit 1
     fi
 
-    # WP-273 0.29.5 R6.1*: prompts в FMT с {{...}}, runner substitute'ит при чтении.
+    # WP-273 0.29.6 R6.1** escape: build-runtime НЕ должен подменять плейсхолдеры
+    # в sed-выражениях этого runner'а (иначе runner после build ищет values вместо
+    # placeholders в промптах). Собираем двойно-фигурные токены через bash-конкатенацию.
     local prompt
     local _gov_repo="${IWE_GOVERNANCE_REPO:-DS-strategy}"
     local _ws="${IWE_WORKSPACE:-$HOME/IWE}"
     local _gh_user="${GITHUB_USER:-your-username}"
+    local _o='{''{' _c='}''}'
     prompt=$(sed \
-        -e "s|{{GOVERNANCE_REPO}}|$_gov_repo|g" \
-        -e "s|{{WORKSPACE_DIR}}|$_ws|g" \
-        -e "s|{{GITHUB_USER}}|$_gh_user|g" \
+        -e "s|${_o}GOVERNANCE_REPO${_c}|$_gov_repo|g" \
+        -e "s|${_o}WORKSPACE_DIR${_c}|$_ws|g" \
+        -e "s|${_o}GITHUB_USER${_c}|$_gh_user|g" \
         "$command_path")
 
     # Добавить extra args к промпту

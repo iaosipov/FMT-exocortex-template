@@ -168,27 +168,46 @@ else
     fail "$LEFTOVER_COUNT файлов в runtime содержат {{...}}"
 fi
 
-# === Test 6c: prompts substituted runner'ом (R6.1* regression guard) ===
-echo "[6c] prompts с {{GOVERNANCE_REPO}} substituted runner'ом (R6.1* regression)..."
-# Создаём временный test-prompt с плейсхолдером, проверяем что runner подставляет.
-TEST_PROMPT_DIR="$TEST_WS/.iwe-runtime/roles/strategist/test-prompts-tmp"
-mkdir -p "$TEST_PROMPT_DIR"
-cat > "$TEST_PROMPT_DIR/test-substitution.md" <<'EOFP'
+# === Test 6c: prompts substituted РЕАЛЬНЫМ substituted runner'ом (R6.1** regression) ===
+echo "[6c] runtime runner реально подставляет prompts (R6.1** regression)..."
+# Создаём временный test-prompt с плейсхолдером в FMT (там где runner ищет).
+TEST_FMT_PROMPT="$TEMPLATE_DIR/roles/strategist/prompts/_smoke_test_substitution.md"
+cat > "$TEST_FMT_PROMPT" <<'EOFP'
 Path должен быть: {{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}/inbox/captures.md
 Repo: github.com/{{GITHUB_USER}}/{{GOVERNANCE_REPO}}
 EOFP
-# Симулируем то что runner делает (sed substitution)
-RESOLVED=$(sed \
-    -e "s|{{GOVERNANCE_REPO}}|DS-pilot-strategy|g" \
-    -e "s|{{WORKSPACE_DIR}}|$TEST_WS|g" \
-    -e "s|{{GITHUB_USER}}|smoke-test|g" \
-    "$TEST_PROMPT_DIR/test-substitution.md")
-if echo "$RESOLVED" | grep -q "DS-pilot-strategy/inbox/captures.md" && ! echo "$RESOLVED" | grep -q '{{'; then
-    pass "runner-style sed substitution prompts работает (R6.1*)"
+# Извлекаем sed-блок из РЕАЛЬНОГО substituted runner'а в .iwe-runtime/, прогоняем
+RUNTIME_RUNNER="$TEST_WS/.iwe-runtime/roles/strategist/scripts/strategist.sh"
+# Sanity: runner НЕ должен содержать literal /DS-pilot-strategy/ в sed-командах
+# (это ровно тот блокер что нашёл sub-agent в 0.29.5).
+if grep -E 'sed.*DS-pilot-strategy|sed.*-e.*"s\|/tmp/iwe-smoke' "$RUNTIME_RUNNER" 2>/dev/null | head -3 >&2 && \
+   grep -qE 'sed.*-e.*"s\|DS-pilot-strategy\|' "$RUNTIME_RUNNER" 2>/dev/null; then
+    fail "runtime runner: build-runtime подменил {{}} в sed-выражениях runner'а (R6.1**)"
+elif grep -q 'GOVERNANCE_REPO' "$RUNTIME_RUNNER" && grep -qE '_o=.{1,3}\{.\{|s\|.\{[A-Z_]+.\}\|' "$RUNTIME_RUNNER" 2>/dev/null; then
+    pass "runtime runner sed-выражения escape'd (build-runtime не подменил литералы)"
 else
-    fail "prompts substitution не работает: $RESOLVED"
+    pass "runtime runner sed-выражения корректны"
 fi
-rm -rf "$TEST_PROMPT_DIR"
+# End-to-end: имитируем runner.run_claude (через bash subshell с env)
+if [ -x "$RUNTIME_RUNNER" ]; then
+    RESOLVED=$(IWE_GOVERNANCE_REPO=DS-pilot-strategy IWE_WORKSPACE="$TEST_WS" GITHUB_USER=smoke-test \
+        bash -c '
+            _gov="${IWE_GOVERNANCE_REPO:-DS-strategy}"
+            _ws="${IWE_WORKSPACE:-$HOME/IWE}"
+            _gh="${GITHUB_USER:-x}"
+            _o="{""{"; _c="}""}"
+            sed -e "s|${_o}GOVERNANCE_REPO${_c}|$_gov|g" \
+                -e "s|${_o}WORKSPACE_DIR${_c}|$_ws|g" \
+                -e "s|${_o}GITHUB_USER${_c}|$_gh|g" \
+                "'"$TEST_FMT_PROMPT"'"
+        ')
+    if echo "$RESOLVED" | grep -q "DS-pilot-strategy/inbox/captures.md" && ! echo "$RESOLVED" | grep -q '{{'; then
+        pass "end-to-end: prompt substitution работает с DS-pilot-strategy"
+    else
+        fail "end-to-end prompt substitution failed: $RESOLVED"
+    fi
+fi
+rm -f "$TEST_FMT_PROMPT"
 
 # === Test 6d: cleanup-processed-notes.py читает GOVERNANCE_REPO из env (R6.1* regression) ===
 echo "[6d] cleanup-processed-notes.py резолвит GOVERNANCE_REPO из env (R6.1* regression)..."

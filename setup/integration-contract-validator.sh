@@ -5,7 +5,7 @@
 # докуменация говорит А, код делает Б — нужен автоматический детектор расхождений
 # до релиза.
 #
-# 7 детекторов:
+# 8 детекторов:
 #   1. manifest_paths    — пути из update-manifest.json существуют в дереве
 #   2. seed_references   — protocol-*.md ссылки на seed/ существуют в seed/
 #   3. extension_table   — extensions/README.md table ↔ реальное placement EXTENSION POINT в protocol-*/SKILL.md
@@ -13,6 +13,7 @@
 #   5. runner_readonly   — runners резолвят prompts/role.yaml/notify через $IWE_TEMPLATE (R5.1, 0.29.3)
 #   6. install_failfast  — install.sh имеют grep '{{' check на PLIST_SRC (R5.2, 0.29.3)
 #   7. prompts_python_coverage — нет hardcoded DS-strategy в prompts и .py (R6.1*, 0.29.5)
+#   8. sed_placeholder_escape — substituted runners НЕ имеют bare {{X}} в sed (R6.1**, 0.29.6)
 #
 # Usage:
 #   bash setup/integration-contract-validator.sh [--verbose]
@@ -51,7 +52,7 @@ log "=== Integration Contract Validator (WP-273 R4.8) ==="
 log ""
 
 # === Detector 1: manifest paths existence ===
-log "[1/7] manifest_paths — пути из update-manifest.json в дереве..."
+log "[1/8] manifest_paths — пути из update-manifest.json в дереве..."
 if [ -f update-manifest.json ] && command -v python3 >/dev/null 2>&1; then
     MISSING=$(python3 -c "
 import json, os
@@ -76,7 +77,7 @@ fi
 log ""
 
 # === Detector 2: seed references in protocols ===
-log "[2/7] seed_references — protocol-*.md ссылки на seed/ существуют..."
+log "[2/8] seed_references — protocol-*.md ссылки на seed/ существуют..."
 SEED_REFS_VIOLATIONS=0
 if [ -d seed ]; then
     while IFS= read -r ref; do
@@ -101,7 +102,7 @@ fi
 log ""
 
 # === Detector 3: extension table ↔ real EXTENSION POINT placement ===
-log "[3/7] extension_table — extensions/README.md table ↔ EXTENSION POINT в protocol-*.md/SKILL.md..."
+log "[3/8] extension_table — extensions/README.md table ↔ EXTENSION POINT в protocol-*.md/SKILL.md..."
 EXT_VIOLATIONS=0
 if [ -f extensions/README.md ]; then
     # Parse extension table from README.md: lines like "| protocol-close | checks | ..."
@@ -141,7 +142,7 @@ fi
 log ""
 
 # === Detector 4: hook trigger pattern (hooks-design.md принцип) ===
-log "[4/7] hook_artifact — hooks не грепают TOOL_INPUT (R4.5 антипаттерн)..."
+log "[4/8] hook_artifact — hooks не грепают TOOL_INPUT (R4.5 антипаттерн)..."
 HOOK_VIOLATIONS=0
 if [ -d .claude/hooks ]; then
     while IFS= read -r f; do
@@ -167,7 +168,7 @@ fi
 log ""
 
 # === Detector 5: runner read-only references resolve correctly (R5.1 regression) ===
-log "[5/7] runner_readonly — runners резолвят prompts/role.yaml/notify через \$IWE_TEMPLATE..."
+log "[5/8] runner_readonly — runners резолвят prompts/role.yaml/notify через \$IWE_TEMPLATE..."
 RUNNER_VIOLATIONS=0
 # Антипаттерн (Round 5 R5.1): PROMPTS_DIR="\$REPO_DIR/prompts" без fallback на \$IWE_TEMPLATE.
 # Runner работает только если все read-only данные дублированы в runtime.
@@ -194,7 +195,7 @@ fi
 log ""
 
 # === Detector 6: install.sh fail-fast при literal {{...}} в plist (R5.2 regression) ===
-log "[6/7] install_failfast — install.sh имеют grep '{{' check на PLIST_SRC..."
+log "[6/8] install_failfast — install.sh имеют grep '{{' check на PLIST_SRC..."
 FAILFAST_VIOLATIONS=0
 for install_sh in roles/strategist/install.sh roles/extractor/install.sh roles/synchronizer/install.sh; do
     [ -f "$install_sh" ] || continue
@@ -214,7 +215,7 @@ fi
 log ""
 
 # === Detector 7: prompts + python coverage (R6.1* regression — мой smoke test пропустил) ===
-log "[7/7] prompts_python_coverage — нет hardcoded DS-strategy в prompts и .py..."
+log "[7/8] prompts_python_coverage — нет hardcoded DS-strategy в prompts и .py..."
 COVERAGE_VIOLATIONS=0
 # Python scripts: должны читать GOVERNANCE_REPO из env, не хардкодить
 while IFS= read -r py; do
@@ -245,6 +246,32 @@ if [ "$COVERAGE_VIOLATIONS" -eq 0 ]; then
 else
     log "  ❌ FAIL ($COVERAGE_VIOLATIONS prompts/.py с hardcoded DS-strategy)"
     VIOLATIONS=$((VIOLATIONS + COVERAGE_VIOLATIONS))
+fi
+log ""
+
+# === Detector 8: bare {{...}} в sed-выражениях substituted-runners (R6.1**, 0.29.6) ===
+log "[8/8] sed_placeholder_escape — substituted runners НЕ имеют bare {{X}} в sed (build-runtime подменит)..."
+SED_VIOLATIONS=0
+# Парсим overlay-реестр: substituted-файлы из реестра проверяем на bare {{X}} в sed-выражениях.
+# Антипаттерн (R6.1**): sed -e "s|{{X}}|val|" в substituted runner'е → build-runtime подменит {{X}} → sed broken.
+# Правильно: использовать escape (через bash переменные _o='{''{', _c='}''}', либо вынести в helper).
+while IFS= read -r path; do
+    [ -f "$path" ] || continue
+    case "$path" in *.sh)
+        # Ищем sed -e "s|{{X}}|...|" — это bare placeholder в substituted-файле = регрессия R6.1**.
+        if grep -qE 'sed.*-e.*"s\|\{\{[A-Z_]+\}\}\|' "$path" 2>/dev/null; then
+            log "  ⚠ $path: bare {{X}} в sed-выражении (R6.1** antipattern, build-runtime подменит литерал)"
+            SED_VIOLATIONS=$((SED_VIOLATIONS + 1))
+        fi
+        ;;
+    esac
+done < <(awk '/^substituted:/,/^[a-z_]+:/' .claude/runtime-overlay.yaml 2>/dev/null | grep -oE '^\s+- .*' | sed 's/^[[:space:]]*-[[:space:]]*//' | sed 's/[[:space:]]*#.*//')
+
+if [ "$SED_VIOLATIONS" -eq 0 ]; then
+    log "  ✅ PASS"
+else
+    log "  ❌ FAIL ($SED_VIOLATIONS substituted runners с bare {{X}} sed)"
+    VIOLATIONS=$((VIOLATIONS + SED_VIOLATIONS))
 fi
 log ""
 

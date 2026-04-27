@@ -5,6 +5,42 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.6] — 2026-04-27
+
+### Fixed (R6.1** — критический блокер от sub-agent post-release verify 0.29.5)
+
+Sub-agent post-release verify нашёл блокер, который мой 0.29.5 fix создал заново — **более серьёзный, чем то, что 0.29.5 закрывал**.
+
+**Что произошло:** в 0.29.5 я добавил sed-substitution в `run_claude` runners (`strategist.sh`, `extractor.sh`):
+```bash
+sed -e "s|{{GOVERNANCE_REPO}}|$_gov_repo|g" ...
+```
+
+`build-runtime.sh` обрабатывал эти runner'ы как substituted — sed подменял `{{GOVERNANCE_REPO}}` ВНУТРИ моего sed-выражения. После build runner становился:
+```bash
+sed -e "s|DS-evgenii-pilot-strategy|$_gov_repo|g" ...  # ИСКАЛ значение в промпте
+```
+
+Промпты в FMT с `{{GOVERNANCE_REPO}}` НЕ подменялись → LLM получал raw плейсхолдеры. **Все runners сломаны для всех пилотов кроме `GOVERNANCE_REPO=DS-strategy`** (мой авторский кейс — поэтому я не заметил).
+
+**Почему мой smoke test не поймал:** Test 6c в 0.29.5 симулировал sed с оригинальными `{{...}}` плейсхолдерами на тестовом промпте — НЕ читал реальный substituted runner из `.iwe-runtime/`. Имитация ≠ реальность.
+
+**Фикс:** escape через bash-конкатенацию одиночных скобок:
+```bash
+local _o='{''{' _c='}''}'  # build-runtime ищет цельный токен, не находит
+sed -e "s|${_o}GOVERNANCE_REPO${_c}|$_gov|g" ...
+```
+
+`build-runtime` ищет `\{\{[A-Z_]+\}\}` regex'ом, не находит составные `'{''{'` + `'}''}'`. Runner после build остаётся неизменным.
+
+### Added (тесты + детектор для catch регрессии)
+
+- **smoke-test 6c переписан** — теперь читает РЕАЛЬНЫЙ substituted runner из `.iwe-runtime/`, проверяет что в его sed-выражениях НЕТ literal-значений (только escape-токены), end-to-end проверяет что substitution работает с `DS-pilot-strategy`.
+- **integration-contract-validator detector #8 `sed_placeholder_escape`** — парсит overlay-реестр, для каждого substituted-файла проверяет НЕТ ли bare `{{X}}` в sed-выражениях. Catch'ит регрессию класса R6.1**.
+
+### Why
+Архитектурный урок: **«sub-agent oversight даёт +30% покрытия» — снова подтверждено**. Мой 0.29.5 audit нашёл R6.1*, но создал R6.1** (более серьёзный, потому что my fix был неправильным). Sub-agent verify поймал это до того как пилот обновился. **Без sub-agent verify ВСЕ пилоты получили бы сломанную автоматизацию.** Расширение smoke-test до чтения реального runtime + новый detector — закрывают этот класс пермаментно.
+
 ## [0.29.5] — 2026-04-27
 
 ### Fixed (R6.1* — sub-agent post-release verify нашёл upущение proactive audit'а)
