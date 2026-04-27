@@ -5,6 +5,20 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.2] — 2026-04-27
+
+### Fixed (Round 5 Евгения — runtime/automation path blockers)
+
+Round 5 нашёл 4 критических расхождения в архитектуре F после red-team-проверки на чистом 0.29.1:
+
+- **R5.1 — runtime неполный для runners.** `.iwe-runtime/` содержал substituted скрипты, но НЕ содержал `roles/*/prompts/`, `roles/*/role.yaml`, `roles/synchronizer/scripts/notify.sh`. При этом runner-скрипты (`strategist.sh`, `extractor.sh`) искали `PROMPTS_DIR="$REPO_DIR/prompts"` рядом с собой → `.iwe-runtime/roles/strategist/prompts/` (пусто) → fail. **Фикс:** runners теперь резолвят `PROMPTS_DIR` через `$IWE_TEMPLATE/roles/<role>/prompts` (read-only из FMT) с fallback. Аналогично `notify_script` в strategist.sh/extractor.sh, `NOTIFY_SH` и `role.yaml` lookup в scheduler.sh. Архитектурный принцип сохранён: substituted в runtime, read-only из FMT — без дублирования read-only данных.
+- **R5.2 — install.sh ставил plist с literal `{{IWE_RUNTIME}}`.** Если запущен без экспортированной env-переменной (например, в новом shell без source), fallback chain сваливался в legacy FMT path — а plist в FMT содержит `{{IWE_RUNTIME}}` (clean upstream). Результат: `~/Library/LaunchAgents/com.X.plist` с literal плейсхолдером, launchd не выполняет. **Фикс:** install.sh во всех 3 ролях имеет fail-fast — `grep -qE '\{\{[A-Z_]+\}\}'` на выбранном PLIST_SRC. При обнаружении плейсхолдеров — exit 2 + конкретные подсказки (source ~/.zshenv / bash build-runtime / migrate).
+- **R5.3 — update.sh roles reinstall шёл ДО build-runtime.** Если roles изменились, install.sh запускался против устаревшего `.iwe-runtime/`. **Фикс:** Step 6d (build-runtime) добавлен ПЕРЕД roles reinstall блоком. Старый Step 8 (build-runtime в конце) удалён как дубликат. Перед roles reinstall дополнительно `source ~/.iwe-paths` — гарантирует IWE_RUNTIME/IWE_TEMPLATE в env для install.sh fail-fast.
+- **R5.4 — migrate-to-runtime-target.sh финальные инструкции неправильно упорядочены.** Говорил «1. install agents → 2. source ~/.zshenv» — но install требует env уже expanded. **Фикс:** новый порядок «1. source ~/.zshenv → 2. verify .iwe-runtime → 3. install selected roles» с явной подсказкой про fail-fast (если шаг 1 пропущен).
+
+### Why
+Round 5 от Евгения после полной верификации 0.29.1 на чистом workspace. Все 4 проблемы — порядковые/конфигурационные на стыке runner ↔ build-runtime ↔ install.sh. Архитектура F остаётся корректной (FMT immutable, runtime regenerable), но «контракт между шагами» (env propagation, ordering) был неполным.
+
 ## [0.29.1] — 2026-04-27
 
 ### Fixed (CI green — pilot feedback Евгений)

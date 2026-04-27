@@ -11,10 +11,21 @@
 set -e
 
 # Конфигурация
+# WP-273 R5 fix (Round 5 Евгения): substituted runner живёт в .iwe-runtime/,
+# но prompts/ — read-only, должны браться из FMT через $IWE_TEMPLATE.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 WORKSPACE="{{WORKSPACE_DIR}}"
-PROMPTS_DIR="$REPO_DIR/prompts"
+
+# PROMPTS_DIR резолв: $IWE_TEMPLATE → standard FMT → relative (legacy)
+if [ -n "${IWE_TEMPLATE:-}" ] && [ -d "$IWE_TEMPLATE/roles/extractor/prompts" ]; then
+    PROMPTS_DIR="$IWE_TEMPLATE/roles/extractor/prompts"
+elif [ -d "$WORKSPACE/FMT-exocortex-template/roles/extractor/prompts" ]; then
+    PROMPTS_DIR="$WORKSPACE/FMT-exocortex-template/roles/extractor/prompts"
+else
+    PROMPTS_DIR="$REPO_DIR/prompts"
+fi
+
 LOG_DIR="{{HOME_DIR}}/logs/extractor"
 CLAUDE_PATH="{{CLAUDE_PATH}}"
 ENV_FILE="{{HOME_DIR}}/.config/aist/env"
@@ -47,14 +58,17 @@ notify() {
 
 notify_telegram() {
     local scenario="$1"
-    # WP-273 Этап 2: notify.sh живёт в .iwe-runtime/ (Generated runtime). Fallback на FMT.
+    # WP-273 R5 fix: notify.sh — read-only из FMT (не substituted, нет плейсхолдеров).
+    # Resolution order: $IWE_TEMPLATE → standard FMT path → runtime fallback (legacy).
     local notify_script
-    if [ -n "${IWE_RUNTIME:-}" ] && [ -f "$IWE_RUNTIME/roles/synchronizer/scripts/notify.sh" ]; then
-        notify_script="$IWE_RUNTIME/roles/synchronizer/scripts/notify.sh"
-    elif [ -f "$WORKSPACE/.iwe-runtime/roles/synchronizer/scripts/notify.sh" ]; then
-        notify_script="$WORKSPACE/.iwe-runtime/roles/synchronizer/scripts/notify.sh"
-    else
+    if [ -n "${IWE_TEMPLATE:-}" ] && [ -f "$IWE_TEMPLATE/roles/synchronizer/scripts/notify.sh" ]; then
+        notify_script="$IWE_TEMPLATE/roles/synchronizer/scripts/notify.sh"
+    elif [ -f "$WORKSPACE/FMT-exocortex-template/roles/synchronizer/scripts/notify.sh" ]; then
         notify_script="$WORKSPACE/FMT-exocortex-template/roles/synchronizer/scripts/notify.sh"
+    elif [ -n "${IWE_RUNTIME:-}" ] && [ -f "$IWE_RUNTIME/roles/synchronizer/scripts/notify.sh" ]; then
+        notify_script="$IWE_RUNTIME/roles/synchronizer/scripts/notify.sh"
+    else
+        notify_script="$WORKSPACE/.iwe-runtime/roles/synchronizer/scripts/notify.sh"
     fi
     if [ -f "$notify_script" ]; then
         "$notify_script" extractor "$scenario" >> "$LOG_FILE" 2>&1 || true

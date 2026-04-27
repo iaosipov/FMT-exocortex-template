@@ -34,24 +34,37 @@ STATE_DIR="$HOME/.local/state/exocortex"
 LOG_DIR="$HOME/logs/synchronizer"
 LOG_FILE="$LOG_DIR/scheduler-$(date +%Y-%m-%d).log"
 
-ROLES_DIR="{{IWE_RUNTIME}}/roles"
-NOTIFY_SH="$SCRIPT_DIR/notify.sh"
+# WP-273 R5 fix (Round 5 Евгения): substituted runners в .iwe-runtime/, но
+# role.yaml — read-only метаданные (не substituted, нет плейсхолдеров) — должны
+# браться из FMT через $IWE_TEMPLATE. notify.sh — также read-only.
+ROLES_DIR_RUNTIME="{{IWE_RUNTIME}}/roles"
+ROLES_DIR_TEMPLATE="${IWE_TEMPLATE:-$HOME/IWE/FMT-exocortex-template}/roles"
+ROLES_DIR="$ROLES_DIR_RUNTIME"  # backward-compat alias для downstream-логики
+# notify.sh — read-only, не substituted
+if [ -n "${IWE_TEMPLATE:-}" ] && [ -f "$IWE_TEMPLATE/roles/synchronizer/scripts/notify.sh" ]; then
+    NOTIFY_SH="$IWE_TEMPLATE/roles/synchronizer/scripts/notify.sh"
+elif [ -f "$HOME/IWE/FMT-exocortex-template/roles/synchronizer/scripts/notify.sh" ]; then
+    NOTIFY_SH="$HOME/IWE/FMT-exocortex-template/roles/synchronizer/scripts/notify.sh"
+else
+    NOTIFY_SH="$SCRIPT_DIR/notify.sh"  # legacy fallback
+fi
 
 # Таймаут на задачи (сек): предотвращает блокировку dispatch зависшей задачей
 TASK_TIMEOUT_SHORT=300    # 5 мин — bash-скрипты (code-scan, dt-collect, reindex)
 TASK_TIMEOUT_LONG=1800    # 30 мин — Claude CLI (strategist, scout, extractor)
 
-# Role runner discovery: reads runner path from role.yaml, fallback to convention
+# Role runner discovery: role.yaml — read-only из FMT (template), runner — substituted из runtime.
+# WP-273 R5: разделили location'ы — yaml из template, runner из runtime.
 get_role_runner() {
     local role="$1"
-    local yaml="$ROLES_DIR/$role/role.yaml"
+    local yaml="$ROLES_DIR_TEMPLATE/$role/role.yaml"
     if [ -f "$yaml" ]; then
         local runner
         runner=$(grep '^runner:' "$yaml" | sed 's/runner: *//' | tr -d '"' | tr -d "'")
-        [ -n "$runner" ] && echo "$ROLES_DIR/$role/$runner" && return
+        [ -n "$runner" ] && echo "$ROLES_DIR_RUNTIME/$role/$runner" && return
     fi
-    # Fallback: convention-based path
-    echo "$ROLES_DIR/$role/scripts/$role.sh"
+    # Fallback: convention-based path (substituted runner в runtime)
+    echo "$ROLES_DIR_RUNTIME/$role/scripts/$role.sh"
 }
 
 STRATEGIST_SH="$(get_role_runner strategist)"

@@ -10,10 +10,22 @@ set -e
 command -v caffeinate >/dev/null 2>&1 && caffeinate -diu -w $$ &
 
 # Конфигурация
+# WP-273 R5 fix (Round 5 Евгения): substituted runner живёт в .iwe-runtime/,
+# но prompts/ и notify.sh — read-only данные, должны браться из FMT (immutable upstream).
+# Архитектурный принцип: substituted в runtime, read-only из FMT через $IWE_TEMPLATE.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 WORKSPACE="$HOME/IWE/DS-strategy"
-PROMPTS_DIR="$REPO_DIR/prompts"
+
+# PROMPTS_DIR резолв: $IWE_TEMPLATE (Generated runtime) → $HOME/IWE/FMT-exocortex-template (default) → relative (legacy fallback)
+if [ -n "${IWE_TEMPLATE:-}" ] && [ -d "$IWE_TEMPLATE/roles/strategist/prompts" ]; then
+    PROMPTS_DIR="$IWE_TEMPLATE/roles/strategist/prompts"
+elif [ -d "$HOME/IWE/FMT-exocortex-template/roles/strategist/prompts" ]; then
+    PROMPTS_DIR="$HOME/IWE/FMT-exocortex-template/roles/strategist/prompts"
+else
+    PROMPTS_DIR="$REPO_DIR/prompts"  # legacy: same dir as runner (pre-WP-273)
+fi
+
 LOG_DIR="$HOME/logs/strategist"
 CLAUDE_PATH="{{CLAUDE_PATH}}"
 CLAUDE_TIMEOUT=1800  # 30 мин — защита от зависания Claude CLI
@@ -62,7 +74,15 @@ notify() {
 
 notify_telegram() {
     local scenario="$1"
-    local notify_script="$REPO_DIR/../synchronizer/scripts/notify.sh"
+    # WP-273 R5: notify.sh — read-only из FMT, не substituted (нет плейсхолдеров).
+    local notify_script
+    if [ -n "${IWE_TEMPLATE:-}" ] && [ -f "$IWE_TEMPLATE/roles/synchronizer/scripts/notify.sh" ]; then
+        notify_script="$IWE_TEMPLATE/roles/synchronizer/scripts/notify.sh"
+    elif [ -f "$HOME/IWE/FMT-exocortex-template/roles/synchronizer/scripts/notify.sh" ]; then
+        notify_script="$HOME/IWE/FMT-exocortex-template/roles/synchronizer/scripts/notify.sh"
+    else
+        notify_script="$REPO_DIR/../synchronizer/scripts/notify.sh"  # legacy fallback
+    fi
     [ -f "$notify_script" ] && "$notify_script" strategist "$scenario" >> "$LOG_FILE" 2>&1 || true
 }
 
