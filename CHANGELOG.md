@@ -5,6 +5,18 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.28.12] — 2026-04-27
+
+### Fixed (pilot feedback Дмитрий — Linux first-class support, 4 hotfix)
+
+- **`scripts/iwe-audit.sh`** — опечатка `$DRIFT_RC_` → `${DRIFT_RC}_`. На macOS под `set -e` опечатка глоталась (bare `$DRIFT_RC_` = пустая строка), на Linux под `set -eu` падала с `unbound variable: DRIFT_RC_`. Markdown-italic вокруг кода (`_iwe-drift.sh exit code: N_`) сохранён.
+- **`scripts/iwe-drift.sh`** — функция `dir_newest_mtime_days_ago` использовала `stat -f %m` (macOS-синтаксис) без fallback'а на `stat -c %Y` (Linux). На Linux `xargs stat -f %m` возвращал статистику ФС вместо mtime → unbound variable. Добавлен runtime-детектор как в `mtime_days_ago` рядом.
+- **`roles/strategist/scripts/strategist.sh:9`** — `caffeinate -diu -w $$ &` → guard `command -v caffeinate >/dev/null 2>&1 && caffeinate ...`. На Linux `caffeinate` отсутствует, скрипт сыпал `command not found` в логи каждый запуск. На Linux cron/systemd сами управляют sleep, guard корректен.
+- **`roles/strategist/scripts/strategist.sh:102`** — убран `--dangerously-skip-permissions`. Claude Code блокирует флаг под root/sudo (Linux cron от root → отказ). `--allowedTools "Read,Write,Edit,Glob,Grep,Bash"` уже даёт явный whitelist, доп. флаг не требуется. На macOS поведение не меняется (allowedTools работает идентично).
+
+### Why
+Аудит инсталляции IWE на Linux/Docker (Дмитрий, 26 апр) обнаружил 4 macOS-специфичных места: 1 опечатка + 1 утечка `stat`-несовместимости + 1 шум `caffeinate` в логах + 1 release-blocker `--dangerously-skip-permissions` под root в cron. Все 4 — класс «Linux first-class support», до сих пор не было оценочного прохода. Этап 0 WP-273 (4-й корень: cross-platform compat). Без этих фиксов background automation на Linux вообще не поднимается; интерактивный mode работал только частично.
+
 ## [0.28.11] — 2026-04-27
 
 ### Fixed (pilot feedback Евгений Round 4 R4.1 — manifest 404 на runtime-файлах)

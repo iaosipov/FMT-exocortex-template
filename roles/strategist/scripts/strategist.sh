@@ -6,7 +6,8 @@ set -e
 
 # Предотвращаем сон: -i (idle, работает на батарее) -d (display) -u (user activity)
 # Флаг -s (system sleep) не используем — он НЕ работает на батарее (OBC может переключить профиль)
-caffeinate -diu -w $$ &
+# Linux: caffeinate отсутствует — guard через command -v (на Linux достаточно, что cron/systemd сам управляет sleep)
+command -v caffeinate >/dev/null 2>&1 && caffeinate -diu -w $$ &
 
 # Конфигурация
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -99,7 +100,9 @@ ${prompt}"
 
     # Запуск Claude Code с содержимым команды как промпт (с timeout-защитой)
     local rc=0
-    timeout "$CLAUDE_TIMEOUT" "$CLAUDE_PATH" --dangerously-skip-permissions \
+    # NB: --dangerously-skip-permissions не используется — Claude Code блокирует флаг
+    # под root/sudo (Linux cron). --allowedTools задаёт явный whitelist, чего достаточно.
+    timeout "$CLAUDE_TIMEOUT" "$CLAUDE_PATH" \
         --allowedTools "Read,Write,Edit,Glob,Grep,Bash" \
         -p "$prompt" \
         >> "$LOG_FILE" 2>&1 || rc=$?
