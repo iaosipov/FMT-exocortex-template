@@ -5,6 +5,46 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.9] — 2026-04-28
+
+### Fixed (R5.5 — Suffix extensions native, WP-273 reopened по триггеру Евгения)
+
+После 0.29.7 Евгений заметил незакрытый contract gap: helper `.claude/scripts/load-extensions.sh` существует (R4.4 артефакт из 0.29.0/0.29.7), но **ни один skill/protocol его не вызывает** — все 13 EXTENSION POINT'ов всё ещё инструктируют `ls extensions/<protocol>.<hook>.md` (exact filename). `extensions/README.md` обещает wildcard suffix («Несколько расширений одного hook — загружаются в алфавитном порядке»), но кодом end-to-end это не закрыто. Это паттерн «Spec ↔ State drift» — helper готов, consumers не подключены.
+
+**Корневая причина:** R4.4 в WP-273 закоммитил helper, но автор пропустил «закрытие контракта» — точку, где skills/protocols фактически начинают вызывать loader. Suffix-файлы лежали бы пассивно, manifest-файлы оставались единственным рабочим способом — пилоты делали ручные manifest'ы с Read'ом suffix-файлов как workaround.
+
+**Фикс end-to-end (13 EXTENSION POINT'ов):**
+
+| Файл | Точки | Hook'и |
+|------|-------|--------|
+| `memory/protocol-open.md` | 1 | after |
+| `memory/protocol-close.md` | 2 | checks, after |
+| `.claude/skills/run-protocol/SKILL.md` | 3 (generic) | before, after, checks |
+| `.claude/skills/day-open/SKILL.md` | 3 | before, after, checks |
+| `.claude/skills/day-close/SKILL.md` | 4 (3 × `checks` + 1 × `before`) | before, checks |
+| `.claude/skills/month-close/SKILL.md` | 2 | before, after |
+
+Каждый паттерн `ls extensions/X.Y.md → Read` заменён на:
+```
+bash .claude/scripts/load-extensions.sh X Y → exit 0 → Read каждый файл из вывода (alphabetic) → выполнить
+```
+
+**Документация (контракт wildcard):**
+- `extensions/README.md` обновлён: 13 EP вместо 9 (добавлены `day-open.checks`, `day-close.before`, `month-close.before/after`); явный раздел про loader-native (с 0.29.9); manifest sorts ПОСЛЕ suffix lexico → пометка про `01-`, `02-` префиксы для управления порядком; пара unicode-битых ячеек таблицы починена (`ша�� 6д` → `шаг 6д`, `Ре��лексия` → `Рефлексия`).
+- `.claude/skills/extend/SKILL.md` каталог: 13 EP в таблице, явный раздел про suffix.
+
+**Smoke-test:** `setup/smoke-test-fresh-install.sh` Test 7 (3 sub-теста):
+- 7a — manifest + 2 suffix → 3 файла, alphabetic order `health → linear → manifest`.
+- 7b — hook без файлов → exit 1.
+- 7c — только suffix без manifest → exit 0.
+Всего 12 PASS / 2 FAIL (две FAIL — pre-existing R6.x known issues, не R5.5).
+
+**Эффект для пилотов:** теперь можно держать **только** suffix-файлы (`day-close.after.health.md` + `day-close.after.linear.md`) без manifest-файла. Если manifest существовал как workaround (Read'ом подгружал suffix) — его надо **удалить**, иначе loader подхватит и manifest, и suffix → двойное выполнение.
+
+### Why
+
+Закрытие WP-273 4-го корня провала «Spec ↔ State drift» через **end-to-end** замыкание контракта. R4.4 в 0.29.0/0.29.7 был наполовину сделан — helper без consumer'ов это не contract closure, а **обещание** в документации без реализации. Метапаттерн: «положить файл в репо ≠ закрыть контракт». R5.5 показал что Round-серии Евгения работают как валидатор: helper мог пролежать пассивным месяц, пока пилот первый раз попробовал бы suffix-файл и обнаружил.
+
 ## [0.29.8] — 2026-04-28
 
 ### Added (правило именования РП в WP-REGISTRY.md)
