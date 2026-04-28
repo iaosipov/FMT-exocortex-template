@@ -5,6 +5,12 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.12] — 2026-04-28
+
+### Fixed
+
+- **`scripts/iwe-audit.sh` — путь поиска `.exocortex.env`** — скрипт искал файл в `$HOME/.exocortex.env`, но `setup.sh ≥0.7.0` (WP-273) сохраняет его в `$IWE_ROOT/.exocortex.env`. Пользователи с актуальной установкой получали ложную ошибку «файл отсутствует». Исправлено: сначала проверяется `$IWE_ROOT/`, fallback на `$HOME/` для legacy-инсталляций (до 0.7.0). Фидбек пилота Дмитрия, 28 апр.
+
 ## [0.29.11] — 2026-04-28
 
 ### Added
