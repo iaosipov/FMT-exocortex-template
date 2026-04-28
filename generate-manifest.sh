@@ -93,9 +93,75 @@ done < <(git -C "$SCRIPT_DIR" ls-files | sort)
     echo '}'
 } > "$MANIFEST"
 
+# === Deprecated files (исторический список — поддерживается вручную) ===
+# Каждая запись: path|reason
+# Только L1-платформенные файлы, которые update.sh когда-то ставил, а потом удалил.
+# update.sh удаляет их из установок пользователей при следующем обновлении.
+DEPRECATED_LIST=(
+    "LEARNING-PATH.md|moved to docs/LEARNING-PATH.md"
+    "memory/claude-md-maintenance.md|consolidated, removed in v0.27"
+    "memory/wp-gate-lesson.md|consolidated into protocol-work.md, removed in v0.27"
+    "roles/strategist/prompts/day-close.md|strategist role removed; use .claude/skills/day-close/"
+    "roles/strategist/prompts/day-plan.md|strategist role removed"
+    "roles/strategist/prompts/note-review.md|strategist role removed"
+    "roles/strategist/prompts/session-prep.md|strategist role removed"
+    "roles/strategist/prompts/strategy-session.md|strategist role removed; use .claude/skills/strategy-session/"
+    "roles/strategist/prompts/week-review.md|strategist role removed"
+    "roles/strategist/scripts/cleanup-processed-notes.py|strategist role removed"
+    "roles/strategist/scripts/cleanup-processed-notes.sh|strategist role removed"
+    "strategist-agent/README.md|strategist-agent directory removed in v0.24"
+    "strategist-agent/REPO-TYPE.md|strategist-agent directory removed"
+    "strategist-agent/prompts/day-close.md|strategist-agent directory removed"
+    "strategist-agent/prompts/day-plan.md|strategist-agent directory removed"
+    "strategist-agent/prompts/note-review.md|strategist-agent directory removed"
+    "strategist-agent/prompts/session-prep.md|strategist-agent directory removed"
+    "strategist-agent/prompts/strategy-cascade.md|strategist-agent directory removed"
+    "strategist-agent/prompts/strategy-session.md|strategist-agent directory removed"
+    "strategist-agent/prompts/strategy.md|strategist-agent directory removed"
+    "strategist-agent/prompts/week-review.md|strategist-agent directory removed"
+    "strategist-agent/scripts/strategist.sh|strategist-agent directory removed"
+)
+
+# Добавляем deprecated_files в JSON через Python
+DEPRECATED_JSON=""
+last_dep=$(( ${#DEPRECATED_LIST[@]} - 1 ))
+for i in "${!DEPRECATED_LIST[@]}"; do
+    entry="${DEPRECATED_LIST[$i]}"
+    dpath="${entry%%|*}"
+    dreason="${entry#*|}"
+    comma=","
+    [ "$i" -eq "$last_dep" ] && comma=""
+    DEPRECATED_JSON="${DEPRECATED_JSON}    {\"path\": \"${dpath}\", \"reason\": \"${dreason}\"}${comma}
+"
+done
+
+python3 -c "
+import json, sys
+
+with open('$MANIFEST') as f:
+    data = json.load(f)
+
+deprecated = []
+lines = '''$DEPRECATED_JSON'''.strip().splitlines()
+for line in lines:
+    line = line.strip().rstrip(',').strip()
+    if line:
+        try:
+            deprecated.append(json.loads(line))
+        except:
+            pass
+
+data['deprecated_files'] = deprecated
+
+with open('$MANIFEST', 'w', encoding='utf-8') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+"
+
 echo "Готово: $MANIFEST"
 echo "  Версия: $VERSION"
 echo "  Файлов: ${#FILES[@]}"
+echo "  Устаревших: ${#DEPRECATED_LIST[@]}"
 echo ""
 echo "Проверьте diff и закоммитьте:"
 echo "  git diff update-manifest.json"

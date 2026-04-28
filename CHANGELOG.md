@@ -5,6 +5,14 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.11] — 2026-04-28
+
+### Added
+
+- **`deprecated_files` в манифесте** — `update.sh` теперь обнаруживает и удаляет устаревшие L1-файлы (WP-5 Ф-N артефакт #1). Добавлен раздел `deprecated_files` в `update-manifest.json` и `generate-manifest.sh`; `update.sh` показывает список и удаляет при применении. Первая партия: `strategist-agent/` (удалён), `roles/strategist/prompts+scripts/` (переехало в `.claude/skills/`), `LEARNING-PATH.md` (переехал в `docs/`), `memory/claude-md-maintenance.md` + `memory/wp-gate-lesson.md` (устарели).
+- **`/iwe-bug-report` скилл** — создаёт GitHub issue в FMT-exocortex-template через `gh issue create` (6 шагов: категоризация → детали → gh CLI check → issue → URL).
+- **`docs/onboarding/iwe-layers.md`** — онбординг-схема слоёв L1/L2/L3.
+
 ## [0.29.10] — 2026-04-28
 
 ### Fixed (Linux portability — bug-report от пилота Дмитрия)
