@@ -69,9 +69,16 @@ dir_newest_mtime_days_ago() {
         mtime_days_ago "$dir"
         return
     fi
+    # Detect stat flavor once per call (BSD vs GNU)
+    local stat_fmt
+    if stat -f %m / >/dev/null 2>&1; then
+        stat_fmt="-f %m"   # macOS / BSD
+    else
+        stat_fmt="-c %Y"   # Linux / GNU
+    fi
     local newest
     newest=$(find "$dir" -type f -not -path '*/.git/*' -print0 2>/dev/null \
-        | xargs -0 stat -f %m 2>/dev/null \
+        | xargs -0 stat $stat_fmt 2>/dev/null \
         | sort -nr | head -1)
     if [ -z "${newest:-}" ]; then
         echo "-1"
