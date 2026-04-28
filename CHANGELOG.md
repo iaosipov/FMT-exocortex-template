@@ -12,6 +12,8 @@ Versioning: [Semantic Versioning](https://semver.org/).
 - **`deprecated_files` в манифесте** — `update.sh` теперь обнаруживает и удаляет устаревшие L1-файлы (WP-5 Ф-N артефакт #1). Добавлен раздел `deprecated_files` в `update-manifest.json` и `generate-manifest.sh`; `update.sh` показывает список и удаляет при применении. Первая партия: `strategist-agent/` (удалён), `roles/strategist/prompts+scripts/` (переехало в `.claude/skills/`), `LEARNING-PATH.md` (переехал в `docs/`), `memory/claude-md-maintenance.md` + `memory/wp-gate-lesson.md` (устарели).
 - **`/iwe-bug-report` скилл** — создаёт GitHub issue в FMT-exocortex-template через `gh issue create` (6 шагов: категоризация → детали → gh CLI check → issue → URL).
 - **`docs/onboarding/iwe-layers.md`** — онбординг-схема слоёв L1/L2/L3.
+- **`.stignore` по умолчанию** — шаблон добавлен в корень FMT (`717d2d8`). При `update.sh` пользователь получает рабочий `.stignore` для Syncthing (исключены `.git/`, `node_modules/`, `.venv/`, `*.pyc` и другие build-артефакты). Фидбек пилота Дмитрия, 27 апр.
+- **`day-close` шаг 10b rule-classifier** — добавлен шаг `python3 $HOME/IWE/.claude/scripts/rule-classifier.py` после коммита в SKILL.md day-close (WP-272 Ф5.2, `0e41292`). Обогащает журнал `~/logs/rule-engine/YYYY-MM-DD-classified.jsonl`. Exit-код игнорируется (идемпотентно); убивать через 60 сек если зависает.
 
 ## [0.29.10] — 2026-04-28
 
