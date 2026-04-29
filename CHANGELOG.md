@@ -5,6 +5,22 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.15] — 2026-04-29
+
+### Added — closure pre-existing WARN из validator #3
+
+`extensions/README.md` декларировал hooks `month-close.before` и `month-close.after`, но `month-close` SKILL отсутствовал в FMT (жил только в авторском IWE). Validator #3 выдавал 2 WARN (в обходных категориях, не FAIL) — pre-existing с момента добавления month-close в README (0.29.9).
+
+**Промоция month-close skill из авторского IWE → FMT:**
+- `.claude/skills/month-close/SKILL.md` создан (280 строк, заменены авторские константы `DS-my-strategy` → `{{GOVERNANCE_REPO}}`, `~/IWE/` → `{{WORKSPACE_DIR}}/`).
+- Содержит 2 EXTENSION POINT через `load-extensions.sh month-close before` (Шаг 0) и `load-extensions.sh month-close after` (Шаг 11).
+- Добавлен в `update-manifest.json` files (alphabetic order).
+
+### Verified
+
+`integration-contract-validator.sh` → ✅ PASS (8/8 + Detector #3 теперь без WARN)
+`smoke-test-fresh-install.sh` → ✅ PASS (14/14)
+
 ## [0.29.14] — 2026-04-29
 
 ### Fixed (sub-agent post-release audit 0.29.13 нашёл 3 дополнительных проблемы)
