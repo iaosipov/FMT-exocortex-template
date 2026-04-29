@@ -233,8 +233,9 @@ done < <(find roles -name '*.py' -type f 2>/dev/null)
 # Prompts: не должны иметь bare DS-strategy/, должны использовать {{GOVERNANCE_REPO}}
 while IFS= read -r prompt; do
     [ -f "$prompt" ] || continue
-    # Hits: bare 'DS-strategy/' или ' DS-strategy ' или '`DS-strategy`'
-    if grep -qE '`DS-strategy`|/DS-strategy/| DS-strategy[ /]' "$prompt" 2>/dev/null; then
+    # Hits: bare 'DS-strategy/' или ' DS-strategy ' или '`DS-strategy`' или '`DS-strategy/'
+    # WP-279 fix: расширен паттерн — ранее пропускал `DS-strategy/path` (backtick+slash).
+    if grep -qE '`DS-strategy[`/]|/DS-strategy/| DS-strategy[ /]' "$prompt" 2>/dev/null; then
         # Game допустима если параллельно есть {{GOVERNANCE_REPO}} (миграционная стадия)
         log "  ⚠ $prompt: bare DS-strategy без {{GOVERNANCE_REPO}}"
         COVERAGE_VIOLATIONS=$((COVERAGE_VIOLATIONS + 1))

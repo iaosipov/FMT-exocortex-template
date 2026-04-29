@@ -5,6 +5,27 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.14] — 2026-04-29
+
+### Fixed (sub-agent post-release audit 0.29.13 нашёл 3 дополнительных проблемы)
+
+**SA-1 — agential prompts auditor/verifier: hardcoded `DS-strategy/` (пропущено validator #7):**
+- `roles/auditor/prompts/audit-plan-consistency.md` строки 12-14 — 3 bare `DS-strategy/path` в backtick.
+- `roles/verifier/prompts/verify-wp-acceptance.md` строка 11 — bare `` `DS-strategy/inbox/...` ``.
+- Validator #7 regex `` '`DS-strategy`|/DS-strategy/| DS-strategy[ /]' `` не матчил паттерн `` `DS-strategy/ `` (backtick + slash без пробела). Расширен до `` '`DS-strategy[`/]|/DS-strategy/| DS-strategy[ /]' ``.
+- Оба файла исправлены: `DS-strategy` → `{{GOVERNANCE_REPO}}`.
+
+**SA-2 — extractor.sh строки 145/148/152: `DS-strategy` в log-сообщениях:**
+- Файл в substituted-списке — `DS-strategy` в текстах логов вводил в заблуждение при нестандартном GOVERNANCE_REPO.
+- Заменено на `$_gov_repo` (переменная уже определена в том же scope строкой 103).
+
+**SA-3 — validator regex gap:**
+- Detector #7 расширен: теперь ловит `` `DS-strategy/path` `` (backtick+slash) — паттерн из agential-промптов.
+
+### Verified
+
+`integration-contract-validator.sh` → ✅ PASS (8/8), `smoke-test-fresh-install.sh` → ✅ PASS (14/14).
+
 ## [0.29.13] — 2026-04-29
 
 ### Fixed (R6 Round 2 от Евгения — регрессия после template-sync 2026-04-28)
