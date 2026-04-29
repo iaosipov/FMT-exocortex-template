@@ -37,6 +37,22 @@ jobs:
           fi
           echo "PASS: CHANGELOG/manifest version sync ($CHANGELOG_VERSION)"
 
+  # Integration contract validator + fresh-install smoke-test.
+  # Defense-in-depth для случая `git commit --no-verify` в pre-commit.
+  # Корень бага (29 апр, 0.29.13 регрессия): template-sync пропихнул pre-0.29.5
+  # код в FMT, валидаторы НЕ были в CI — Євгений нашёл на fresh clone, у нас
+  # commit прошёл. Гейт: те же 2 скрипта что Євгений запускает локально.
+  integration-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3 jq
+      - name: Run integration-contract-validator (8 detectors)
+        run: bash setup/integration-contract-validator.sh
+      - name: Run smoke-test-fresh-install (14 checks)
+        run: bash setup/smoke-test-fresh-install.sh
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:

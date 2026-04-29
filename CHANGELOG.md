@@ -5,6 +5,42 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.16] — 2026-04-29
+
+### Fixed (Євгений Round 3 + sub-agent broader audit)
+
+**EZ-1 — `day-close.checks` не использовал loader (Євгений 29 апр):**
+- `.claude/skills/day-close/SKILL.md` строки 50, 136, 171 читали exact `extensions/day-close.checks.md`. Suffix-расширения (`day-close.checks.beads.md`) не подхватывались.
+- Все 3 точки переведены на `bash .claude/scripts/load-extensions.sh day-close checks` (как day-close.before в 0.29.9 и week-close.before/after в 0.29.13).
+
+**SA-4 — `apply-captures` skill отсутствовал в FMT, но ссылки были:**
+- Skill упомянут в `CHANGELOG.md`, `.claude/skills/ke/SKILL.md`, `roles/strategist/prompts/session-prep.md` — но физически отсутствовал.
+- Промотирован из авторского IWE с заменой констант `DS-my-strategy` → `{{GOVERNANCE_REPO}}` и `~/IWE/` → `{{WORKSPACE_DIR}}/`.
+- Добавлен в `update-manifest.json` files.
+
+**SA-5 — Broken refs в memory:**
+- `memory/MEMORY.md:38-39` — ссылки на `claude-md-maintenance.md` и `wp-gate-lesson.md` (оба deprecated в 0.27, файлов нет). Удалены.
+- `memory/t-checklist.md:61` — ссылка на `memory/protocol-month-close.md` (нет такого файла, есть skill `.claude/skills/month-close/SKILL.md`). Ссылка на отсутствующий протокол убрана.
+
+### Added — meta-fix: интеграция валидаторов в release-gate
+
+**Корневая причина 0.29.13 регрессий:** `integration-contract-validator.sh` и `smoke-test-fresh-install.sh` существовали как ручные скрипты — Євгений запускал на fresh clone, мы при коммите не запускали. CHANGELOG записи «Verified: 8/8 PASS» писались руками. Каждое забывание = регрессия у пилота.
+
+**Pre-commit hook (`.githooks/pre-commit`):**
+- Новый блок `INTEGRATION-CONTRACT-VALIDATOR` запускает `setup/integration-contract-validator.sh` если staged файлы из scope (`roles/`, `.claude/`, `setup/`, `memory/`, `extensions/`, `update-manifest.json`).
+- FAIL → коммит блокируется. Escape: `git commit --no-verify`.
+
+**CI workflow (`.github/workflows/validate-template.yml`):**
+- Новый job `integration-contract` запускает оба скрипта на каждый push/PR в main.
+- Defense-in-depth для `--no-verify` пропусков pre-commit.
+
+После 0.29.16: регрессии класса 0.29.13 ловятся **до** push'а у автора, а не на fresh clone у пилота.
+
+### Verified
+
+`integration-contract-validator.sh` → ✅ PASS (8/8)
+`smoke-test-fresh-install.sh` → ✅ PASS (14/14)
+
 ## [0.29.15] — 2026-04-29
 
 ### Added — closure pre-existing WARN из validator #3

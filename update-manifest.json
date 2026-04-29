@@ -1,5 +1,5 @@
 {
-  "version": "0.29.15",
+  "version": "0.29.16",
   "description": "Манифест платформенных файлов FMT-exocortex-template. Используется update.sh для доставки обновлений.",
   "files": [
     {
@@ -79,6 +79,9 @@
     },
     {
       "path": ".claude/settings.json"
+    },
+    {
+      "path": ".claude/skills/apply-captures/SKILL.md"
     },
     {
       "path": ".claude/skills/archgate/SKILL.md"
