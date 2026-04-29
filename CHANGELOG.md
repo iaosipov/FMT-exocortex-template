@@ -5,6 +5,46 @@ All notable changes to FMT-exocortex-template will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
 
+## [0.29.13] — 2026-04-29
+
+### Fixed (R6 Round 2 от Евгения — регрессия после template-sync 2026-04-28)
+
+Коммит `17102ae template-sync: propagate platform-space changes 2026-04-28` перезаписал файлы из авторского IWE, в котором лежала версия ДО фиксов 0.29.5/0.29.6/0.29.7. Результат: `integration-contract-validator.sh` → 8 violations, `smoke-test-fresh-install.sh` → 2 FAIL.
+
+**RT-1 — `strategist.sh` откат до pre-0.29.5 (3 регрессии одновременно):**
+- `WORKSPACE` стал хардкодом `$HOME/IWE/DS-strategy` (было `{{WORKSPACE_DIR}}/{{GOVERNANCE_REPO}}`).
+- `PROMPTS_DIR` стал `$REPO_DIR/prompts` без `$IWE_TEMPLATE`-fallback (antipattern R5.1).
+- `run_claude()` потерял sed-substitution GOVERNANCE_REPO/WORKSPACE_DIR/GITHUB_USER в промптах (добавлен в 0.29.5, escaped в 0.29.6).
+- Восстановлено до 0.29.7 (git `66f8566`).
+
+**RT-2 — `cleanup-processed-notes.py` откат до pre-0.29.5:**
+- `WORKSPACE = Path.home() / "IWE" / "DS-strategy"` — жёсткий хардкод вернулся.
+- `_resolve_workspace()` (читает `IWE_WORKSPACE` + `IWE_GOVERNANCE_REPO` из env + fallback через `.exocortex.env`) была потеряна.
+- Восстановлено до 0.29.7.
+
+**RT-3 — 6 prompt-файлов откатились до pre-0.29.5:**
+- `roles/strategist/prompts/{day-close,day-plan,note-review,session-prep,strategy-session,week-review}.md` — `DS-strategy` bare без `{{GOVERNANCE_REPO}}`.
+- Все 6 восстановлены до 0.29.7.
+
+**RT-4 — `dt-collect.sh` откатился (detector 7 не ловил .sh в roles/):**
+- `GOVERNANCE_DIR="${GOVERNANCE_DIR:-$WORKSPACE/DS-strategy}"` — хардкод.
+- `SESSION_LOG="$WORKSPACE/DS-strategy/inbox/..."` — хардкод.
+- Файл в `substituted:` списке overlay — build-runtime не мог подставить `{{GOVERNANCE_REPO}}`. Восстановлены плейсхолдеры.
+
+**RT-5 — `update-manifest.json` intersection `files ∩ deprecated_files`:**
+- 0.29.11 добавил в `deprecated_files` 8 файлов с reason `"strategist role removed"`, но эти файлы остались в `files` и физически в репо (роль не удалена). update.sh получил конфликт «доставить и удалить». Удалены 8 premature deprecated_files записей.
+
+**RT-6 — `week-close/SKILL.md` — before/after hooks не перешли на `load-extensions.sh`:**
+- После R5.5 (0.29.9) `day-close.before` перешёл на loader-native, но `week-close.before` и `week-close.after` остались с `ls extensions/week-close.*.md` (exact filename). Обновлены оба по образцу `day-close.before` (0.29.9).
+
+### Verified
+
+`integration-contract-validator.sh` → ✅ PASS (8/8), `smoke-test-fresh-install.sh` → ✅ PASS (14/14).
+
+### Root cause
+
+Файлы из авторского IWE (платформенное пространство) содержали pre-0.29.5 версии — template-sync не подтягивал фиксы, сделанные напрямую в FMT. Правильный flow: фикс в авторском IWE (source-of-truth) → template-sync → FMT. Нарушение в 0.29.4-0.29.7: часть фиксов писалась напрямую в FMT минуя author-space. При следующем template-sync FMT перезаписался старыми версиями.
+
 ## [0.29.12] — 2026-04-28
 
 ### Fixed
