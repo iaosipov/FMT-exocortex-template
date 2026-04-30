@@ -10,3 +10,6 @@ DS-exocortex-setup/
 .claude/settings.local.json
 .claude/checkpoint.md
 .claude/logs/
+
+# Секреты — никогда не коммитить
+.secrets/
