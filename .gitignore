@@ -13,5 +13,3 @@ DS-exocortex-setup/
 
 # Author-local downstream config for sync-communication-style.py (WP-388)
 scripts/sync-communication-style.yaml
-.secrets/
-.secrets/gcp-oauth.keys.json
