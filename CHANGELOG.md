@@ -54,10 +54,32 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 
 
-## [Unreleased] — обновлено 2026-06-17
+
+
+
+
+
+
+
+
+
+
+
+
+
+## [Unreleased] — обновлено 2026-06-21
 
 ### Added
 
+- `affae73` feat(day-open): промоция ТВС-структуры скаффолда + дефолт IWE
+- `ae5e638` feat(translation): add translate.py pipeline + en-doc-style.md
+- `0f54175` feat(wp-432): USER-SPACE customization zones in L1 skills
+- `49443ad` feat(wp-149): promote lesson-close SKILL.md to platform (L1) — lesson/ path
+- `25056ef` feat(WP-5): iwe-bug-report executor→agent + update.sh Step 6f orphan detection
+- `1593f13` feat(WP-295): promote rule-engine.sh + generate-rules-registry.py to platform
+- `3a17360` feat(diagnose): promote diagnose-iwe v5.0 to platform (L1)
+- `3491420` feat(day-close): ask pilot for tomorrow priorities and update priorities.yaml
+- `1651574` feat(skills): promote 6 top skills to FMT with advisory fixes (WP-422)
 - `bcdb0ed` feat(skills): promote skill-creator v0.3.2 + C6 audit + pg-start Verification
 - `326c460` feat(WP-422): promote 7 skills with C3-fixed step headings (L1)
 - `d2dd196` feat(WP-422/SP1): promote skill iwe-restore to platform (L1)
@@ -72,9 +94,13 @@ Versioning: [Semantic Versioning](https://semver.org/).
 - `53cd985` feat(day-open): add ТВС labeling step to skill template (§6b2)
 - `36febfd` feat(strategy): модель ТВС в шаблон (стратегирование + ОРЗ)
 - `673474d` feat(WP-388): проекция базы стиля — 4 новых элемента регистра (зеркало L0)
+- `dd117c5` feat(styles): WP-412 Ф11 — дисциплина языковых стилей в шаблон IWE
 
 ### Changed
 
+- `7baebc5` refactor(diagnose): rename skill diagnose-iwe -> diagnose
+- `89c0837` chore: remove dead hook wakatime-heartbeat.sh
+- `70d540b` docs: remove PACK-MIM from CHANGELOG [protocol-close]
 - `ed2cca0` docs: add KIMI-SETUP.md — инструкция по подключению Kimi к IWE
 - `d98c62e` chore(skill-creator): bump version to 0.3.0 (sync from IWE)
 - `f820cb9` docs(local-llm): sync ADR-001 venv-Python note from author SoT (WP-404 Ф4)
@@ -84,6 +110,18 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `d8c8568` fix(validate-template): skip wakatime-heartbeat.sh in orphan hook check
+- `5917dd6` fix: pathspec enforcement in 6 finalizing skills + lesson-close + skill-promote
+- `b7d1c4c` fix(diagnose): remove duplicate /diagnose trigger entries after rename
+- `ac815a0` fix(skill-promote): GNU-first stat for cross-platform permission preservation
+- `f10e03e` fix(skill-promote): cross-platform cp — copy CONTENTS, not nested dir
+- `ab0c385` fix(wp-432): repair skill-promote tests broken by L1 USER-SPACE feature
+- `ac15602` fix(diagnose-iwe): update form-089.yaml to v5.0 + add USER-SPACE marker
+- `9ac6df2` fix(naming): Решат → Ильшат во всех упоминаниях имени [no-registry-touch]
+- `7e07287` fix: update manifest to exclude auto-generated translation files
+- `de06083` fix(wp-149): sync lesson-close.sh to use lesson/ path instead of workbook/
+- `24dbd80` fix: update subscription name from Бесконечное развитие to Инженерия интеллекта in template
+- `762a441` fix(setup): T3/T4 MCP auth — write .mcp.json with ict_token Bearer header
 - `290d149` fix(wp-7): sanitize author-specific content in template-sync'd files
 - `850c303` fix(wp-7/wpn1): promote create-wp.sh with GOV_REPO parametrization
 - `0f92b40` fix(skill-creator): SKILL.md v0.3.1 — review fixes Critical+High
@@ -99,6 +137,7 @@ Versioning: [Semantic Versioning](https://semver.org/).
 - `8073146` fix(WP-7): FMT delivery — .claude/styles propagation, manifest sync, smoke Test 6e
 - `cb8a1a6` fix(COL-06): communication-style-base.md — L1 → S1 (авторский слой)
 - `06b9d79` fix(WP-376): A52/A49/A50/A51 — template hygiene и agentigore sample
+- `c869a3c` fix(pull-on-touch): autostash вместо пропуска-на-грязном — тянет даже на dirty-репо
 
 
 ## [0.35.4] — 2026-06-15
@@ -1323,7 +1362,7 @@ Commits: 150be24 (I1+I2 sync из DS-ai-systems), 731471f (I3 sweep 11 точе�
 
 ### Added
 - **CI smoke-test** (`.github/workflows/validate-template.yml`): job «Smoke-test protocol hooks on clean user env» — создаёт tmp-окружение с `DS-strategy` + минимальным DayPlan и прогоняет `protocol-artifact-validate.sh`. Падает, если хук блокирует commit на чистом пользователе. Перехватывает L1→L3 утечки, которые пропускает blacklist.
-- **Расширенный blacklist** (два уровня) в `validate-template.yml` + зеркально в локальном `setup/validate-template.sh`: глобальный (запрещено везде: `tserentserenov`, `PACK-MIM`, `aist_bot_newarchitecture`, `DS-Knowledge-Index-Tseren`, `DS-my-strategy`, `engines/tailor`) и protocol-only (запрещено в `.claude/skills|hooks|rules`, `memory`, `CLAUDE.md`, но разрешено в README/docs: `@aist_me_bot`, `digital-twin`, `content-pipeline`, `knowledge-mcp`, `gateway-mcp`, `DS-agent-workspace/scheduler`). Покрытие расширено на `roles/`.
+- **Расширенный blacklist** (два уровня) в `validate-template.yml` + зеркально в локальном `setup/validate-template.sh`: глобальный (запрещено везде: `tserentserenov`, `aist_bot_newarchitecture`, `DS-Knowledge-Index-Tseren`, `DS-my-strategy`, `engines/tailor`) и protocol-only (запрещено в `.claude/skills|hooks|rules`, `memory`, `CLAUDE.md`, но разрешено в README/docs: `@aist_me_bot`, `digital-twin`, `content-pipeline`, `knowledge-mcp`, `gateway-mcp`, `DS-agent-workspace/scheduler`). Покрытие расширено на `roles/`.
 
 ### Fixed
 - CI `validate-template.yml` — зеркалирование exclude-логики локального валидатора для путей (`/Users/...`, `/opt/homebrew`) + shellcheck severity: warning→error (0 pred-existing errors, CI зеленеет).

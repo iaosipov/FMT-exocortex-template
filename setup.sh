@@ -508,7 +508,7 @@ else
         echo "  .mcp.json содержит iwe-knowledge → https://mcp.aisystant.com/mcp"
         echo "  T1-T2: при первом запуске откроется браузер (OAuth через Ory)."
         echo "  T3-T4: CLI-режим (IWE_TIER=T3 в env или tier: T3 в ~/.iwe/config.yaml)."
-        echo "  Необходима подписка «Бесконечное развитие»."
+        echo "  Необходима подписка «Инженерия интеллекта» (ранее «Бесконечное развитие»)."
         echo "  После входа: /mcp в Claude Code."
     fi
 fi
