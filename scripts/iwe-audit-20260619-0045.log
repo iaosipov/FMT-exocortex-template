@@ -1,0 +1,47 @@
+# IWE Installation Audit — 2026-06-19 00:45
+
+_Root:_ `/c/Users/GMT_OSII/IWE`
+
+## 1. Inventory
+14/14 критичных L1-файлов на месте. Coverage 14/14, пропусков 0.
+
+## 2. L1 drift
+iwe-drift.sh упал на баге (line 84: Inodes: unbound variable — дефект скрипта на MINGW64).
+Drift измерен независимо через update.sh --dry-run: «Всё актуально. Обновлений нет (314 файлов)».
+L1 drift = 0.
+
+## 3. DS-strategy
+git-репо. Uncommitted: 1 (?? scripts/ — служебная). Diff со skeleton: 100 файлов (норма — накопленный рабочий контент).
+
+## 4. MCP healthcheck
+Сервер knowledge-mcp.aisystant. search ✅, list_sources ✅ (18 источников).
+personal_search/dt_read/github_status — нет под этими именами (подписочный слой не сконфигурирован, ожидаемо).
+Coverage по доступным: 2/2.
+
+## 5. Update prerequisites
+git ✅ curl ✅ python3 ✅. .exocortex.env GITHUB_USER ✅. FMT чистый, main ✅. Готово к update.sh.
+
+## 6. Ритуал smoke-test
+НЕ ВЫПОЛНЕН — завязан на /tmp-sentinel + PreToolUse-хук, требует bash-инфраструктуры;
+на хосте рабочий только git-bash (MINGW64), системный bash.exe нерабочий. Пропущен сознательно.
+Косвенно: файлы скиллов/протоколов на месте и совпадают с апстримом.
+
+---
+
+## Verdict: ⚠️ Работоспособно, блокеров нет, 2 warning
+
+- L1 (платформа): ✅ — 14/14, drift=0 (v0.35.4)
+- Ритуалы: ⚠️ — smoke-test не выполнен (ограничение bash на Windows); косвенные свидетельства в норме
+- MCP: ✅ — 2/2 доступных отвечают; подписочный слой не сконфигурирован (ожидаемо)
+- DS-strategy: ✅ — git-репо рабочее, отличия от скелета = накопленный контент
+
+Критичных gaps: нет.
+
+Warnings:
+1. Ритуал smoke-test не подтверждён живым прогоном (bash на Windows).
+2. iwe-drift.sh — дефект на MINGW64 (line 84 unbound variable), штатный инструмент аудита недоступен на хосте.
+
+Рекомендации:
+- Руками: зафиксировать баг iwe-drift.sh (bug-report в DS-strategy/inbox/bugs/).
+- При сессии с полным bash: выполнить smoke-test day-open вручную.
+- Отложить: подписочный слой MCP (personal_search/dt_read) — только при подключении подписки.

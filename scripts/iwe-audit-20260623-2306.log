@@ -1,0 +1,26 @@
+# IWE Installation Audit — 2026-06-23 23:06
+
+## 1. Inventory — ✅ 14/14
+Все критичные L1-файлы на месте (CLAUDE.md, MEMORY.md, sync-manifest, distinctions, formatting, day-open/close SKILL, protocol-open/work/close, update.sh, iwe-drift.sh, params.yaml, DS-strategy git-репо).
+
+## 2. L1 drift — ⚠️ не проверен
+iwe-drift.sh упал: line 84 "Inodes: unbound variable" (exit 1). Drift не сформирован.
+
+## 3. DS-strategy — ⚠️
+git-репо. 5 uncommitted: DayPlan 2026-06-23, WeekReport W26, exocortex/memory/MEMORY.md, inbox/WP-41, ?? scripts/. Diff с FMT-skeleton: 106 (ожидаемо — рабочие артефакты).
+
+## 4. MCP healthcheck — ✅ 2/2 доступных
+knowledge search ✅ (<15s), graph_stats ✅ (3956 понятий / 13797 связей). Подписочные personal_*/dt_* в этом окружении не подключены (namespace knowledge-mcp_aisystant).
+
+## 5. Update prerequisites — ⚠️
+git/curl/python3 ✅, GITHUB_USER=GMT_OSII ✅. FMT-exocortex-template/ имеет 2 uncommitted на main — update может конфликтовать.
+
+## 6. Ритуал smoke-test (/run-protocol close day) — ✅
+Read-логика полная; write корректно блокируется dry-run gate. Техдолг WP-58: check-index-health.py + day-close.sh не установлены.
+
+---
+
+## Verdict: ⚠️ Работоспособно с оговорками
+- L1: ✅  | Ритуалы: ⚠️ (WP-58 техдолг) | MCP: ✅ | DS-strategy: ⚠️
+- Critical gaps: 0
+- Warnings: iwe-drift.sh баг (drift не верифицирован); 5 uncommitted в DS-strategy.
