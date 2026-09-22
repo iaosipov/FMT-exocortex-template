@@ -44,6 +44,21 @@ BRANCH="main"
 # (author/dev workflow) — a failed release lookup aborts fail-closed (#501),
 # it never falls back to main automatically.
 UPDATE_CHANNEL="${IWE_UPDATE_CHANNEL:-release}"
+# WP-529 F26: an unknown channel used to fall through to the main branch
+# silently — a typo (IWE_UPDATE_CHANNEL=realese) delivered unreleased main to a
+# user who explicitly asked for the pinned release. Fail closed and name the
+# accepted values instead of guessing which one was meant.
+case "$UPDATE_CHANNEL" in
+    release|main) ;;
+    *)
+        echo "✗ Неизвестный канал обновления: IWE_UPDATE_CHANNEL='$UPDATE_CHANNEL'" >&2
+        echo "  Допустимые значения:" >&2
+        echo "    release — последний опубликованный выпуск (по умолчанию)" >&2
+        echo "    main    — движущаяся ветка разработки (только для автора)" >&2
+        echo "  Обновление остановлено: неизвестное значение раньше молча уводило на main." >&2
+        exit "$EXIT_USAGE"
+        ;;
+esac
 RAW_BASE="https://raw.githubusercontent.com/$REPO/$BRANCH"
 API_BASE="https://api.github.com/repos/$REPO"
 
@@ -2758,7 +2773,21 @@ else
     # every file below counts as unverified (INTEGRITY_TAINTED, not merely
     # "checked composition only" as the old comment claimed).
     INTEGRITY_TAINTED=true
-    echo "⚠ Python недоступен — только состав файлов сверяется, содержимое НЕ проверяется по контрольной сумме." >&2
+    # WP-529 F26: одна строка в общем потоке вывода терялась между десятками
+    # других — пользователь узнавал о работе без проверки целостности только по
+    # коду возврата 4, если вообще на него смотрел. Рамка и явные последствия
+    # делают деградацию заметной в момент, когда она происходит.
+    echo "" >&2
+    echo "┌──────────────────────────────────────────────────────────────────┐" >&2
+    echo "│ ⚠  ОБНОВЛЕНИЕ БЕЗ ПРОВЕРКИ ЦЕЛОСТНОСТИ                           │" >&2
+    echo "└──────────────────────────────────────────────────────────────────┘" >&2
+    echo "  Python недоступен, поэтому контрольные суммы SHA-256 не проверяются." >&2
+    echo "  Сверяется только состав файлов: подменённое или повреждённое" >&2
+    echo "  содержимое в этом режиме обнаружено НЕ будет." >&2
+    echo "  Обновление завершится с кодом $EXIT_TAINTED вместо 0 — это не ошибка," >&2
+    echo "  а отметка, что проверка целостности не выполнялась." >&2
+    echo "  Как вернуть полную проверку: установите python3 и повторите запуск." >&2
+    echo "" >&2
 
     # High 2 fail-closed guard (peer-session 2026-08-21-12, Codex, revised
     # after cold-context review found the first version tautological — the
@@ -3792,12 +3821,12 @@ if [ -f "$ENV_FILE" ]; then
                 DETECTED_GOV="${IWE_GOVERNANCE_REPO:-DS-strategy}"
                 echo "  ⚠ Governance repo не найден в $DETECT_WS — fallback ${IWE_GOVERNANCE_REPO:-DS-strategy}. Проверьте .exocortex.env вручную."
             fi
-            echo "GOVERNANCE_REPO=$DETECTED_GOV" >> "$ENV_FILE"
+            echo "GOVERNANCE_REPO=\"$DETECTED_GOV\"" >> "$ENV_FILE"
             echo "  ✓ Добавлено GOVERNANCE_REPO=$DETECTED_GOV в .exocortex.env (миграция 0.28.5)"
             ENV_GOVERNANCE_REPO="$DETECTED_GOV"
         fi
         if ! grep -q '^IWE_TEMPLATE=' "$ENV_FILE" 2>/dev/null; then
-            echo "IWE_TEMPLATE=$SCRIPT_DIR" >> "$ENV_FILE"
+            echo "IWE_TEMPLATE=\"$SCRIPT_DIR\"" >> "$ENV_FILE"
             echo "  ✓ Добавлено IWE_TEMPLATE=$SCRIPT_DIR в .exocortex.env (миграция 0.28.5)"
             ENV_IWE_TEMPLATE="$SCRIPT_DIR"
         fi
@@ -3807,7 +3836,7 @@ if [ -f "$ENV_FILE" ]; then
         # generated plist could ever carry it — the launchd jobs silently ran
         # without it (strategist.sh:357-366 fell back to the free-form prompt).
         if ! grep -q '^IWE_SCRIPTS=' "$ENV_FILE" 2>/dev/null; then
-            echo "IWE_SCRIPTS=$SCRIPT_DIR/scripts" >> "$ENV_FILE"
+            echo "IWE_SCRIPTS=\"$SCRIPT_DIR/scripts\"" >> "$ENV_FILE"
             echo "  ✓ Добавлено IWE_SCRIPTS=$SCRIPT_DIR/scripts в .exocortex.env (WP-529 Ф94)"
             ENV_IWE_SCRIPTS="$SCRIPT_DIR/scripts"
         fi
@@ -3815,7 +3844,7 @@ if [ -f "$ENV_FILE" ]; then
         # === WP-273 Этап 2: IWE_RUNTIME для Generated runtime architecture (F) ===
         if ! grep -q '^IWE_RUNTIME=' "$ENV_FILE" 2>/dev/null; then
             DETECT_WS_RT="${ENV_WORKSPACE_DIR:-$WORKSPACE_DIR}"
-            echo "IWE_RUNTIME=$DETECT_WS_RT/.iwe-runtime" >> "$ENV_FILE"
+            echo "IWE_RUNTIME=\"$DETECT_WS_RT/.iwe-runtime\"" >> "$ENV_FILE"
             echo "  ✓ Добавлено IWE_RUNTIME=$DETECT_WS_RT/.iwe-runtime (миграция WP-273 → 0.29.0)"
             ENV_IWE_RUNTIME="$DETECT_WS_RT/.iwe-runtime"
         fi
@@ -3832,6 +3861,34 @@ if [ -f "$ENV_FILE" ]; then
                 echo "  ✓ Добавлено USER_NAME=$DETECTED_USER_NAME в .exocortex.env (WP-5 Ф43)"
             fi
         fi
+
+        # === Re-quote unquoted values in existing .exocortex.env (issue #781) ===
+        # #223/#316 приучили setup.sh/update.sh писать значения в кавычках, но
+        # ни один путь не чинил уже существующий файл, созданный до фикса —
+        # `TIMEZONE_DESC=4:00 UTC` без кавычек ломает любой `source
+        # .exocortex.env` (bash трактует хвост после пробела как команду,
+        # `UTC: command not found`, rc 127). Чиним только значения, где
+        # реально нет пробела в написанном виде разбор строкой (line-parser
+        # выше) уже подтвердил валидный KEY — просто дописываем кавычки туда,
+        # где их ещё нет. Список расширен ревью после первого фикса (#786):
+        # GOVERNANCE_REPO/IWE_TEMPLATE/IWE_SCRIPTS/IWE_RUNTIME писались этим
+        # же update.sh без кавычек чуть ниже по файлу (миграции 0.28.5/WP-273/
+        # WP-529) — тот же класс дефекта на путях с пробелом.
+        for _key in TIMEZONE_DESC GITHUB_USER WORKSPACE_DIR CLAUDE_PATH \
+                    CLAUDE_PROJECT_SLUG HOME_DIR USER_NAME \
+                    GOVERNANCE_REPO IWE_TEMPLATE IWE_SCRIPTS IWE_RUNTIME; do
+            _raw_line=$(grep -E "^${_key}=" "$ENV_FILE" 2>/dev/null | head -1)
+            [ -z "$_raw_line" ] && continue
+            _raw_value="${_raw_line#*=}"
+            case "$_raw_value" in
+                \"*\"|\'*\') continue ;;  # уже в двойных или одинарных кавычках
+                *[[:space:]]*)
+                    _quoted=$(sed_escape_replacement "$_raw_value")
+                    sed_inplace "s|^${_key}=.*|${_key}=\"${_quoted}\"|" "$ENV_FILE"
+                    echo "  ✓ $_key взят в кавычки в .exocortex.env (issue #781, значение содержало пробел)"
+                    ;;
+            esac
+        done
 
         # === Migrate .exocortex.env from FMT to workspace (WP-273 Этап 2) ===
         # Если .exocortex.env живёт в FMT (legacy ≤0.28.x), копируем в workspace.
@@ -4147,9 +4204,14 @@ if changed:
     print(msg)
 " "$MCP_WORKSPACE" 2>/dev/null
 elif [ ! -f "$MCP_WORKSPACE" ] && [ -f "$MCP_TEMPLATE" ]; then
-    # No workspace .mcp.json — copy from template
-    cp "$MCP_TEMPLATE" "$MCP_WORKSPACE"
-    echo "  ✓ .mcp.json создан из шаблона (Gateway)"
+    # No workspace .mcp.json — copy from template.
+    # issue #786: голый cp оставлял {{HOME_DIR}} буквально — ext-railway не
+    # стартовал. Та же процедура подстановки, что уже применяется к CLAUDE.md.
+    if substitute_claude_placeholders "$MCP_TEMPLATE" "$MCP_WORKSPACE"; then
+        echo "  ✓ .mcp.json создан из шаблона (Gateway)"
+    else
+        echo "  ✗ не удалось создать $MCP_WORKSPACE из шаблона"
+    fi
 elif [ -f "$MCP_WORKSPACE" ] && ! py_available; then
     # No python3 — check if already migrated, otherwise warn
     if grep -q 'iwe-knowledge' "$MCP_WORKSPACE" 2>/dev/null; then
@@ -4158,6 +4220,21 @@ elif [ -f "$MCP_WORKSPACE" ] && ! py_available; then
         echo "  ⚠ .mcp.json: python3 не найден, автомиграция пропущена."
         echo "    Замените knowledge-mcp/digital-twin-mcp на iwe-knowledge вручную."
         echo "    Образец: $MCP_TEMPLATE"
+    fi
+fi
+
+# issue #786 (гэп, найденный ревью после первого фикса): три ветки выше чинят
+# только «файла ещё нет» или «сервер устарел». Автор issue сообщал о файле,
+# ПОБАЙТНО ИДЕНТИЧНОМ шаблону — python-миграция такой файл не трогает
+# (changed остаётся false, нет устаревших ключей), а без python3 ветка просто
+# предупреждает. {{HOME_DIR}} в уже существующем workspace-файле не лечился
+# ни одним путём. Проверяем и чиним отдельно, независимо от того, что
+# случилось выше.
+if [ -f "$MCP_WORKSPACE" ] && grep -qF '{{HOME_DIR}}' "$MCP_WORKSPACE" 2>/dev/null; then
+    if sed_inplace "s|{{HOME_DIR}}|$(sed_escape_replacement "${ENV_HOME_DIR:-$HOME}")|g" "$MCP_WORKSPACE"; then
+        echo "  ✓ .mcp.json: {{HOME_DIR}} подставлен в уже существующем файле (issue #786)"
+    else
+        echo "  ✗ .mcp.json: не удалось подставить {{HOME_DIR}} в уже существующий файл"
     fi
 fi
 
