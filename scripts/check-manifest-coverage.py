@@ -156,6 +156,12 @@ def _parse_excluded_paths(raw: object) -> list[str]:
 
 
 def main() -> None:
+    # Windows consoles default to cp1251/cp866: printing ✅/Кириллица-мix there
+    # raises UnicodeEncodeError, and a crash mid-print exits non-zero — hooks
+    # then report FAIL on a PASS result. Force UTF-8 output on every platform.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     if len(sys.argv) < 2:
         print("Usage: git ls-files | python3 check-manifest-coverage.py <manifest.json>",
               file=sys.stderr)

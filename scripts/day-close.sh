@@ -173,7 +173,13 @@ sync_owned_memory_files() {
 
   "$STDLIB_PYTHON3" - "$@" <<'PYEOF'
 import hashlib
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    # Windows Python has no fcntl; only the POSIX branch below uses it, and
+    # that branch never runs there (issue #911). The import must not be
+    # top-level-fatal or the Windows branch becomes unreachable.
+    fcntl = None
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -1474,7 +1480,14 @@ do_backup() {
   # a dedicated subtree so recovery never confuses platform rules with memory.
   if [ -d "$WORKSPACE_DIR/.claude/rules" ]; then
     mkdir -p "$EXOCORTEX_DST/rules"
-    rsync -a --delete "$WORKSPACE_DIR/.claude/rules/" "$EXOCORTEX_DST/rules/"
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a --delete "$WORKSPACE_DIR/.claude/rules/" "$EXOCORTEX_DST/rules/"
+    else
+      # Windows Git Bash has no rsync: mirror without deletion, matching the
+      # Windows-mode under-promise of sync_owned_memory_files (stale entries
+      # in the destination are preserved, never silently removed).
+      cp -R "$WORKSPACE_DIR/.claude/rules/." "$EXOCORTEX_DST/rules/"
+    fi
   fi
 
   # day-rhythm is also a separate root artefact. Exact bytes win except for a
