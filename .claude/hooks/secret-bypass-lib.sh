@@ -49,6 +49,20 @@ done
 if [ -z "$SECRET_BYPASS_PYTHON" ]; then
   SECRET_BYPASS_PYTHON="$(command -v python3 2>/dev/null || true)"
 fi
+# Same Windows gap as jq above: hook environments can lack every FHS path AND
+# the user PATH entry for python3. Windows installs keep a path-converting
+# shim at <workspace>/bin/python3 (MSYS /c/... args → C:/... for the native
+# interpreter).
+if [ -z "$SECRET_BYPASS_PYTHON" ]; then
+  secret_bypass_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+  for secret_bypass_candidate in "$secret_bypass_lib_dir/../../bin/python3" "$secret_bypass_lib_dir/../../bin/python3.exe"; do
+    if [ -x "$secret_bypass_candidate" ]; then
+      SECRET_BYPASS_PYTHON="$secret_bypass_candidate"
+      break
+    fi
+  done
+  unset secret_bypass_lib_dir
+fi
 
 secret_pattern_process() {
   # Modes read their payload from stdin. No mode prints a matched secret or
