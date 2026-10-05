@@ -399,3 +399,44 @@ iwe_safe_pull() {
     echo "iwe_safe_pull: rebase complete, ${#orig_pids[@]} local patch(es) verified preserved"
   )
 }
+
+# iwe_calendar_source [PARAMS_FILE] — where Day Open takes the calendar from
+# (issue #942): connector (default: calendar connector, then server-calendar.sh),
+# script (server-calendar.sh only), none (the calendar is not used at all).
+# A missing key or file means connector, so existing installs keep working; an
+# unknown value warns on stderr and also means connector.
+iwe_calendar_source() {
+  local file="${1:-}" value
+  [ -f "$file" ] || { echo connector; return 0; }
+  value=$(grep -E '^calendar_source:' "$file" 2>/dev/null | head -1 \
+    | sed -E 's/^calendar_source:[[:space:]]*//; s/[[:space:]]+#.*$//; s/[[:space:]]+$//; s/^["'"'"']//; s/["'"'"']$//')
+  case "$value" in
+    ''|connector) echo connector ;;
+    script|none) echo "$value" ;;
+    *)
+      echo "WARN: params.yaml: calendar_source «$value» неизвестно (connector|script|none), использую connector" >&2
+      echo connector ;;
+  esac
+}
+
+# iwe_scheduler_model KEY DEFAULT [PARAMS_FILE] — model alias for one
+# strategist background scenario (issue #1092), read from a flat params.yaml
+# key (e.g. scheduler_model_week_review). A missing key means DEFAULT, so
+# existing installs keep working unchanged after this is added. A key that
+# is present but empty (or only whitespace) is a config error, not a silent
+# fallback to DEFAULT -- a user who just edited the file to change the model
+# and mistyped it should see that, not keep running the old hardcoded model
+# unaware the edit had no effect. No allowlist of known model aliases: that
+# would go stale as new ones ship and block them until the template catches up.
+iwe_scheduler_model() {
+  local key="$1" default="$2" file="${3:-}" value
+  [ -f "$file" ] || { printf '%s\n' "$default"; return 0; }
+  grep -qE "^${key}:" "$file" 2>/dev/null || { printf '%s\n' "$default"; return 0; }
+  value=$(grep -E "^${key}:" "$file" | head -1 \
+    | sed -E "s/^${key}:[[:space:]]*//; s/[[:space:]]+#.*\$//; s/[[:space:]]+\$//; s/^[\"']//; s/[\"']\$//")
+  if [ -z "${value//[[:space:]]/}" ]; then
+    echo "ERROR: params.yaml: $key задан пустым значением — укажи алиас модели строкой или убери строку целиком, чтобы использовать $default" >&2
+    return 1
+  fi
+  printf '%s\n' "$value"
+}

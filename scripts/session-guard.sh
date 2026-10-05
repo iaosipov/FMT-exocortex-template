@@ -6,7 +6,7 @@
 # Mechanical enforcement: git pre-commit hook проверяет наличие активного семафора.
 #
 # Команды:
-#   open --wp WP-N [--task "..."] [--files "a,b"] [--slug "..."] [--agent claude-code|kimi|hermes] [--personality <unassigned|UUID>]
+#   open --wp WP-N [--task "..."] [--files "a,b"] [--slug "..."] [--agent claude-code|kimi|hermes|grok] [--personality <unassigned|UUID>] [--isolate]
 #   open --housekeeping <reason> [--agent ...]        # фоновая housekeeping-сессия без ORZ
 #   close [--wp WP-N] [--slug "..."] [--agent ...]
 #   close ... --force-no-reflection "<причина>"       # закрыть без ответа на рефлексию —
@@ -24,6 +24,9 @@
 #                                          # коллизирует между параллельными сессиями
 #                                          # (DayPlan, активная карточка РП, hypotheses-log,
 #                                          # MEMORY.md) — не на всё рабочее дерево
+#   freeze-canonical <path> [--force]     # WP-485 Ф14 / WP-520: chflags -R uchg
+#   unfreeze-canonical <path>             # fail-closed: не снимает chflags
+#   request-unfreeze-canonical <path> --reason "..."  # лог запроса + nonce
 #
 # Аренда (WP-484 Ф49): существование сессии и её право разрешать коммит — разные
 # вещи. Возраст отзывает только право (по умолчанию 4h, `IWE_SESSION_LEASE_SEC`);
@@ -40,12 +43,30 @@
 
 set -euo pipefail
 
+# The transition lock below uses Unix fcntl, inode ownership and /bin/bash.
+# Git Bash with native Windows Python cannot uphold that contract. Refuse every
+# command before creating the session directory or touching the canonical repo.
+case "$(uname -s)" in
+  MINGW*|MSYS*)
+    echo 'session-guard: Git Bash на Windows с нативным Python не поддерживается: Unix-блокировка fcntl недоступна. Запустите рабочую сессию в WSL2.' >&2
+    exit 1
+    ;;
+esac
+
 IWE_ROOT="${IWE_ROOT:-$HOME/IWE}"
 SESSION_GUARD_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
 # issue #266: hardcoded "DS-strategy" broke every template user whose
 # governance repo is named "DS-strategy" (the shipped default — see create-wp.sh).
 GOV_REPO="${IWE_GOVERNANCE_REPO:-DS-strategy}"
 SESSION_DIR="$IWE_ROOT/.iwe-runtime/sessions"
+# WP-485 Ф14 / WP-520: logical freeze paths (default-on). Empty override disables.
+if [ -z "${IWE_FROZEN_CANONICAL_PATH+x}" ]; then
+  FROZEN_CANONICAL_PATHS=("$IWE_ROOT/$GOV_REPO" "$IWE_ROOT")
+elif [ -n "$IWE_FROZEN_CANONICAL_PATH" ]; then
+  FROZEN_CANONICAL_PATHS=("$IWE_FROZEN_CANONICAL_PATH")
+else
+  FROZEN_CANONICAL_PATHS=()
+fi
 OPEN_LOG="$IWE_ROOT/$GOV_REPO/inbox/open-sessions.log"
 AGENT_STATUS_SCRIPT="$IWE_ROOT/scripts/agent-status-report.sh"
 # ORZ_DIR resolved further down by resolve_orz_sessions_dir(), once fail()
@@ -61,6 +82,184 @@ now_iso() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 now_date() { date +"%Y-%m-%d"; }
 now_month() { date +"%Y-%m"; }
 fail() { echo "session-guard: $1" >&2; exit "${2:-1}"; }
+
+# WP-485 Ф14 (а∩г): thin isolate helpers
+ISOLATE_LOCK_DIR="$IWE_ROOT/.iwe-runtime/isolate-locks"
+ISOLATE_LOCK_TTL_SEC="${IWE_ISOLATE_LOCK_TTL_SEC:-120}"
+_ISOLATE_LOCKS_HELD=()
+_SG_ISOLATE_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/session-guard-isolate-lib.sh"
+if [ -f "$_SG_ISOLATE_LIB" ]; then
+  # shellcheck source=lib/session-guard-isolate-lib.sh
+  . "$_SG_ISOLATE_LIB"
+fi
+# issue #954: shared reader of WP numbers; the hypothesis gate in `open` finds the card by
+# the normalised number. The same lookup block as in the other consumers, but OPTIONAL here
+# (_WPN_OPTIONAL=1): a session must still open on an installation without the library, the
+# gate then warns and checks only the exact card names (see wp_card_candidates).
+_WPN_ROOT_UP=".."
+_WPN_OPTIONAL=1
+# >>> wp-num locate
+# Find scripts/lib/wp-num.sh (issue #954) from THIS file's own location with symlinks
+# resolved, never from IWE_WORKSPACE / IWE_ROOT / STRATEGY_DIR: callers point those at
+# fixtures. Candidates, in order: lib/ next to the file, <root>/scripts/lib, the template
+# clone next to a delivered workspace (<root>/FMT-exocortex-template), the explicit
+# IWE_TEMPLATE. <root> is _WPN_ROOT_UP above the file's directory (set by each consumer
+# just above this block: the only per-file difference, checked by test_issue_954_locate.sh).
+# The library is mandatory: not finding it is an installation error, not "WP not found",
+# hence exit 4 and not 1 (memory/protocol-open.md reads exit 1 as "РП не найден").
+# A consumer that must keep working without the library (session-guard: its hypothesis gate
+# warns and checks the exact card names, it never blocks a session over a missing library)
+# sets _WPN_OPTIONAL=1 next to _WPN_ROOT_UP: WP_NUM_LIB then stays empty and nothing is sourced.
+_wpn_src="${BASH_SOURCE[0]}"
+_wpn_hops=0
+while [ -L "$_wpn_src" ] && [ "$_wpn_hops" -lt 40 ]; do
+  _wpn_link="$(readlink "$_wpn_src")"
+  case "$_wpn_link" in
+    /*) _wpn_src="$_wpn_link" ;;
+    *) _wpn_src="$(dirname "$_wpn_src")/$_wpn_link" ;;
+  esac
+  _wpn_hops=$((_wpn_hops + 1))
+done
+_wpn_dir="$(cd -P "$(dirname "$_wpn_src")" && pwd)"
+_wpn_root="$(cd -P "$_wpn_dir/$_WPN_ROOT_UP" && pwd)"
+WP_NUM_LIB=""
+for _wpn_cand in "$_wpn_dir/lib/wp-num.sh" \
+                 "$_wpn_root/scripts/lib/wp-num.sh" \
+                 "$_wpn_root/FMT-exocortex-template/scripts/lib/wp-num.sh" \
+                 ${IWE_TEMPLATE:+"$IWE_TEMPLATE/scripts/lib/wp-num.sh"}; do
+  if [ -r "$_wpn_cand" ]; then
+    WP_NUM_LIB="$_wpn_cand"
+    break
+  fi
+done
+if [ -z "$WP_NUM_LIB" ] && [ -z "${_WPN_OPTIONAL:-}" ]; then
+  echo "❌ wp-num.sh не найден (ошибка установки, это не «РП не найден»): нужен scripts/lib/wp-num.sh. Искал: ${_wpn_dir}/lib, ${_wpn_root}/scripts/lib, ${_wpn_root}/FMT-exocortex-template/scripts/lib, IWE_TEMPLATE=${IWE_TEMPLATE:-не задана}. Обновите шаблон: bash update.sh" >&2
+  exit 4
+fi
+if [ -n "$WP_NUM_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$WP_NUM_LIB"
+fi
+# <<< wp-num locate
+
+# Every path where the card of `--wp <id>` may be written, one per line: the id as typed
+# (inbox/<id>/<id>.md and inbox/<id>.md -- what the hypothesis gate always read) and, when
+# the id is a WP number and the shared reader is loaded, the folder card in both spellings
+# (WP-044/, legacy WP-44/) and every flat card of the number, with or without a slug
+# (WP-044.md, WP-44-task.md: wp_num_flat_cards, the lookup wp-list.py and the bundle use).
+# Without the reader only the typed paths are listed. Notes are not listed.
+wp_card_candidates() {
+  local inbox="$1" id="$2" n pad
+  printf '%s\n' "$inbox/$id/$id.md" "$inbox/$id.md"
+  if type wp_num_normalize >/dev/null 2>&1 && n=$(wp_num_normalize "$id"); then
+    pad=$(printf '%03d' "$n")
+    printf '%s\n' "$inbox/WP-$pad/WP-$pad.md" "$inbox/WP-$n/WP-$n.md"
+    wp_num_flat_cards "$inbox" "$id" || true
+  fi
+}
+
+# Succeeds when the top-level `hypothesis_relation` of the card is `unclassified`.
+#
+# Where the field is looked for: one rule, decided by the first NON-EMPTY line of the file
+# (leading blank lines, a UTF-8 BOM and CRLF are ignored).
+#   * It is `---`: the card has a frontmatter, up to the next `---` line, and only the first
+#     such field in it counts. The body is never read, so a YAML example in it (a fenced block
+#     included) is not the card's field.
+#   * It is anything else: the card has no frontmatter, and only its initial block of metadata
+#     is read, the run of `key: value` lines at the top of the file, up to the first blank line,
+#     Markdown heading, fence or any other line; any `hypothesis_relation` in that block counts.
+#     This keeps the one-line fixtures of the WP-518 test (and cards that are bare `key: value`
+#     lines) working without reading the rest of the document: a field after a heading, after
+#     a blank line or inside a ``` / ~~~ fence is an example, not metadata.
+#
+# What the value is: a SUBSET of YAML, on purpose. Supported: single-line plain and quoted
+# values. Not supported: escape sequences and multi-line scalars. A quoted value is taken whole
+# (a `#` inside the quotes belongs to it, so "unclassified # example" is not `unclassified`) and
+# only whitespace and a `# comment` may follow the closing quote; a plain value ends at a ` #`
+# comment. No quote is stripped on its own: an unterminated "unclassified is not `unclassified`
+# either. Where this differs from a YAML parser: an escape is read literally ("unclassifi\x65d"
+# is not `unclassified`, although YAML decodes it to that), and a plain `unclassified` continued
+# on the next line is judged by its first line only (so it still blocks, although YAML reads
+# the two lines as one value).
+card_is_unclassified() {
+  local bom
+  bom=$'\xEF\xBB\xBF'
+  awk -v bom="$bom" -v sq="'" -v dq='"' '
+    function scalar(text,   q, i, n, c, out, closed, tail) {
+      sub(/^[[:space:]]+/, "", text)
+      sub(/[[:space:]]+$/, "", text)
+      q = substr(text, 1, 1)
+      if (q == dq || q == sq) {
+        n = length(text); out = ""; closed = 0
+        for (i = 2; i <= n; i++) {
+          c = substr(text, i, 1)
+          if (q == dq && c == "\\") { out = out substr(text, i, 2); i++; continue }
+          if (c == q) {
+            if (q == sq && substr(text, i + 1, 1) == sq) { out = out sq; i++; continue }
+            closed = 1
+            break
+          }
+          out = out c
+        }
+        if (closed) {
+          tail = substr(text, i + 1)
+          if (tail == "" || tail ~ /^[[:space:]]+#/) return out
+        }
+        return text
+      }
+      sub(/[[:space:]]+#.*$/, "", text)
+      return text
+    }
+    NR == 1 && index($0, bom) == 1 { $0 = substr($0, length(bom) + 1) }
+    state == "" {
+      if ($0 ~ /^[[:space:]]*$/) next
+      first = $0
+      sub(/[[:space:]]+$/, "", first)
+      if (first == "---") { state = "frontmatter"; next }
+      state = "head"
+    }
+    state == "frontmatter" && /^---[[:space:]]*$/ { exit }
+    state == "head" && $0 !~ /^[A-Za-z_][A-Za-z0-9_-]*:/ { exit }
+    /^hypothesis_relation:/ {
+      v = $0
+      sub(/^hypothesis_relation:/, "", v)
+      if (scalar(v) == "unclassified") found = 1
+      if (found || state == "frontmatter") exit
+    }
+    END { exit found ? 0 : 1 }
+  ' "$1" 2>/dev/null
+}
+
+# Prints frozen checkout cwd sits in, or empty. FMT has no gov_repo_dir();
+# check git toplevel only (sufficient for open freeze + tests).
+frozen_checkout_match() {
+  [ "${#FROZEN_CANONICAL_PATHS[@]}" -gt 0 ] || return 0
+  local cwd_toplevel real frozen frozen_real
+  cwd_toplevel="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$cwd_toplevel" ] || return 0
+  real=$(realpath "$cwd_toplevel" 2>/dev/null || echo "$cwd_toplevel")
+  for frozen in "${FROZEN_CANONICAL_PATHS[@]}"; do
+    frozen_real=$(realpath "$frozen" 2>/dev/null || echo "$frozen")
+    if [ "$real" = "$frozen_real" ]; then
+      printf '%s\n' "$cwd_toplevel"
+      return 0
+    fi
+  done
+  return 0
+}
+
+resolve_isolate_push_script() {
+  local candidates=(
+    "$IWE_ROOT/$GOV_REPO/scripts/isolate-push.sh"
+    "$IWE_ROOT/scripts/isolate-push.sh"
+  )
+  local c
+  for c in "${candidates[@]}"; do
+    [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  return 1
+}
+
 
 # Session mutations share one permanent lock inode derived from the canonical
 # `.open` path.  Python's fcntl is available on the same POSIX platforms this
@@ -1037,6 +1236,13 @@ OWNER_PID=""
 CLEANUP_ORPHANS=0
 FORCE_NO_REFLECTION=""
 CLOSE_PATH=""
+ISOLATE_FLAG=0
+BASE_SHA=""
+ISOLATED_WORKTREE_PATH=""
+ISOLATED_WORKTREE_BRANCH=""
+FORCE_FLAG=0
+UNFREEZE_REASON=""
+CANONICAL_OWNER=""
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -1045,6 +1251,11 @@ while [[ $# -gt 0 ]]; do
     --files)  FILES="$2"; shift 2 ;;
     --slug|--topic) SLUG="$2"; shift 2 ;;
     --agent)  AGENT="$2"; shift 2 ;;
+    --isolate) ISOLATE_FLAG=1; shift ;;
+    --base-sha) BASE_SHA="$2"; shift 2 ;;
+    --force) FORCE_FLAG=1; shift ;;
+    --reason) UNFREEZE_REASON="$2"; shift 2 ;;
+    --canonical-owner) CANONICAL_OWNER="$2"; shift 2 ;;
     --housekeeping) HOUSEKEEPING="$2"; shift 2 ;;
     --personality) PERSONALITY="$2"; shift 2 ;;
     --session-id) SESSION_ID_ARG="$2"; shift 2 ;;
@@ -1094,6 +1305,9 @@ fi
 # --- OPEN ---
 if [ "$CMD" = "open" ]; then
   [ "${#POSITIONAL[@]}" -eq 0 ] || fail "open не принимает позиционные аргументы" 1
+  if [ -n "${BASE_SHA:-}" ] && [ "${ISOLATE_FLAG:-0}" != "1" ]; then
+    fail "--base-sha допустим только вместе с --isolate" 1
+  fi
   _safe_session_token "$AGENT" || fail "open: небезопасный --agent '$AGENT'" 1
   if [ -n "$SESSION_ID_ARG" ]; then
     _safe_session_token "$SESSION_ID_ARG" || fail "open: небезопасный --session-id '$SESSION_ID_ARG'" 1
@@ -1190,11 +1404,29 @@ if [ "$CMD" = "open" ]; then
   # Отсутствующее поле намеренно не блокируется: это карточка, созданная до
   # введения контракта, и массовое дообогащение исторических РП не является
   # безопасным побочным эффектом открытия одной сессии.
-  WP_CARD="$IWE_ROOT/$GOV_REPO/inbox/$WP/$WP.md"
-  if [ ! -f "$WP_CARD" ]; then
-    WP_CARD="$IWE_ROOT/$GOV_REPO/inbox/$WP.md"
+  # issue #954: --wp 44, 044, WP-44 and WP-044 name one card (folder WP-044/), so every
+  # place the card can be written is checked and ANY of them still marked unclassified
+  # blocks the open (see wp_card_candidates). A note that merely carries `wp: N` is not a card.
+  # The field is read by card_is_unclassified (where it is looked for -- the frontmatter, or
+  # the initial block of metadata of a card without one -- and which values it understands
+  # are described there), not grepped from the whole file: a trailing `# comment` does not
+  # hide it and an example in the body does not fake it. A session is never refused for the
+  # lack of the shared reader (the gate degrades instead), but checking less than it promises
+  # must not be silent: one warning, and the exact card names are still checked. `open`
+  # re-executes itself under the transition lock (_ensure_session_transition_lock), which runs
+  # this gate a second time: warn on the first pass only.
+  if ! type wp_num_normalize >/dev/null 2>&1 \
+     && [ -z "${IWE_SESSION_TRANSITION_FD:-}" ] && [ -z "${IWE_SESSION_TRANSITION_TARGET:-}" ]; then
+    echo "session-guard: wp-num.sh не найдена: гейт гипотезы проверяет только точные имена карточек" >&2
   fi
-  if [ -f "$WP_CARD" ] && grep -qE "^hypothesis_relation:[[:space:]]*['\"]?unclassified['\"]?[[:space:]]*$" "$WP_CARD"; then
+  WP_CARD=""
+  while IFS= read -r _sg_card; do
+    if [ -f "$_sg_card" ] && card_is_unclassified "$_sg_card"; then
+      WP_CARD="$_sg_card"
+      break
+    fi
+  done < <(wp_card_candidates "$IWE_ROOT/$GOV_REPO/inbox" "$WP")
+  if [ -n "$WP_CARD" ]; then
     fail "РП $WP не классифицирована по гипотезе. До открытия выберите tests, enables, responds, researches или operational в $WP_CARD" 1
   fi
 
@@ -1260,12 +1492,20 @@ if [ "$CMD" = "open" ]; then
     fi
   done < <(ls -t "$SESSION_DIR/${AGENT}"-*.open 2>/dev/null || true)
 
-  SESSION_ID="${SESSION_ID_ARG:-${IWE_SESSION_LOCKED_SESSION_ID:-${IWE_SESSION_ID:-$(date +%s)-$$-$RANDOM}}}"
+  if [ "${ISOLATE_FLAG:-0}" = "1" ] && type isolate_entropy_suffix >/dev/null 2>&1; then
+    SESSION_ID="${SESSION_ID_ARG:-${IWE_SESSION_LOCKED_SESSION_ID:-${IWE_SESSION_ID:-$(date +%s)-$(isolate_entropy_suffix)}}}"
+  else
+    SESSION_ID="${SESSION_ID_ARG:-${IWE_SESSION_LOCKED_SESSION_ID:-${IWE_SESSION_ID:-$(date +%s)-$$-$RANDOM}}}"
+  fi
   _safe_session_token "$SESSION_ID" || fail "open: небезопасный session_id '$SESSION_ID'" 1
   SEM_FILE="$SESSION_DIR/${AGENT}-${SESSION_ID}.open"
   _ensure_session_transition_lock "$SEM_FILE" "$SESSION_ID"
   if [ -e "$SEM_FILE" ] || [ -L "$SEM_FILE" ]; then
-    fail "open: exact session_id '$SESSION_ID' уже открыт; существующий семафор не изменён" 1
+    if [ "${ISOLATE_FLAG:-0}" = "1" ]; then
+      : # re-entry: isolate block verifies worktree identity and allowlist
+    else
+      fail "open: exact session_id '$SESSION_ID' уже открыт; существующий семафор не изменён" 1
+    fi
   fi
   if find "$SESSION_DIR" -maxdepth 1 \( -type f -o -type l \) \
       -name "$(basename "$SEM_FILE").*" -print -quit 2>/dev/null | grep -q .; then
@@ -1285,6 +1525,164 @@ if [ "$CMD" = "open" ]; then
   ORZ_DIR="$(resolve_orz_sessions_dir)"
   ORZ_FILE="$ORZ_DIR/$ORZ_BASENAME"
   mkdir -p "$(dirname "$ORZ_FILE")"
+  # --- WP-485 Ф14: logical freeze on open (carve-outs: --isolate, --canonical-owner, exact-slug re-entry) ---
+  if [ "${#FROZEN_CANONICAL_PATHS[@]}" -gt 0 ] && [ -z "${CANONICAL_OWNER:-}" ] && [ "${ISOLATE_FLAG:-0}" != "1" ]; then
+    ACTUAL_CWD_TOPLEVEL=$(frozen_checkout_match)
+    if [ -n "$ACTUAL_CWD_TOPLEVEL" ]; then
+      REENTRY_OK=false
+      if [ -n "${SLUG:-}" ]; then
+        while IFS= read -r EXISTING_SEM; do
+          [ -z "$EXISTING_SEM" ] && continue
+          [ -f "$EXISTING_SEM" ] || continue
+          [ "$(grep "^wp: " "$EXISTING_SEM" | cut -d' ' -f2-)" = "$WP" ] || continue
+          [ "$(grep "^slug: " "$EXISTING_SEM" | cut -d' ' -f2-)" = "$SLUG" ] || continue
+          lease_valid "$EXISTING_SEM" || continue
+          REENTRY_OK=true
+          break
+        done < <(find "$SESSION_DIR" -name "${AGENT}-*.open" -type f 2>/dev/null)
+      fi
+      if ! $REENTRY_OK; then
+        fail "этот checkout ($ACTUAL_CWD_TOPLEVEL) под freeze — прямая запись не разрешена. Используй --isolate или --canonical-owner <reason>." 1
+      fi
+    fi
+  fi
+
+  # --- WP-485 Ф14: open --isolate (happy-path + re-entry) ---
+  if [ "${ISOLATE_FLAG:-0}" = "1" ]; then
+    type with_isolate_lock >/dev/null 2>&1 || fail "--isolate: session-guard-isolate-lib.sh не подключён" 1
+    [ -z "${CANONICAL_OWNER:-}" ] || fail "--isolate и --canonical-owner взаимоисключающи" 1
+    [ -n "$SLUG" ] && validate_isolate_slug "$SLUG"
+    ISOLATE_BASE_DIR="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    [ -n "$ISOLATE_BASE_DIR" ] || fail "--isolate: текущий каталог не git-репозиторий" 1
+    if [ -n "${BASE_SHA:-}" ]; then
+      GIT_NO_LAZY_FETCH=1 git -C "$ISOLATE_BASE_DIR" cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null \
+        || fail "--isolate: --base-sha '$BASE_SHA' не является коммитом в ($ISOLATE_BASE_DIR)" 1
+      # A partial clone can have the commit but not its blobs. worktree add
+      # otherwise fetches them implicitly from the promisor remote. Probe all
+      # reachable objects without lazy fetch before creating a branch.
+      if ! ISOLATE_LOCAL_OBJECTS=$(GIT_NO_LAZY_FETCH=1 git -C "$ISOLATE_BASE_DIR" rev-list --objects --missing=print "$BASE_SHA" 2>/dev/null); then
+        fail "--isolate: не удалось проверить локальные объекты --base-sha '$BASE_SHA'; канон не изменён" 1
+      fi
+      if printf '%s\n' "$ISOLATE_LOCAL_OBJECTS" | grep -q '^?'; then
+        fail "--isolate: --base-sha '$BASE_SHA' неполон локально (отсутствуют объекты partial clone); подключись к origin и догрузи объекты либо выбери полный локальный коммит. Канон не изменён" 1
+      fi
+    fi
+    # A remote URL can carry credentials in userinfo, path, query or fragment.
+    printf 'session-guard: --isolate: изолирую %q (remote: origin)\n' "$ISOLATE_BASE_DIR" >&2
+    ISOLATE_STORE_DIR="$IWE_ROOT/.iwe-runtime/isolated-worktrees"
+    mkdir -p "$ISOLATE_STORE_DIR"
+    ISOLATE_STORE_DIR_REAL="$(realpath "$ISOLATE_STORE_DIR")"
+    ISOLATED_WORKTREE_PATH="$ISOLATE_STORE_DIR/${AGENT}-${SESSION_ID}"
+    ISOLATED_WORKTREE_BRANCH="session-isolate/${AGENT}-${SESSION_ID}"
+    ISOLATE_EXISTING_SEM="$SEM_FILE"
+    [ -f "$ISOLATE_EXISTING_SEM" ] && ISOLATE_SEM_EXISTS=1 || ISOLATE_SEM_EXISTS=0
+
+    # Dirty policy: first open on frozen path = advisory; re-entry = allowlist only
+    ISOLATE_DIRTY_ENTRIES=()
+    while IFS= read -r -d '' isolate_status_entry; do
+      [ -n "$isolate_status_entry" ] || continue
+      ISOLATE_DIRTY_ENTRIES+=("$isolate_status_entry")
+    done < <(git -C "$ISOLATE_BASE_DIR" status --porcelain -z --untracked-files=all 2>/dev/null)
+    if [ "${#ISOLATE_DIRTY_ENTRIES[@]}" -gt 0 ]; then
+      if [ "$ISOLATE_SEM_EXISTS" = "1" ]; then
+        ISOLATE_ALLOWLIST=$(grep '^file: ' "$ISOLATE_EXISTING_SEM" | sed 's/^file: //' | sort -u)
+        ISOLATE_UNEXPECTED_DIRTY=""
+        for isolate_status_entry in "${ISOLATE_DIRTY_ENTRIES[@]}"; do
+          isolate_path="${isolate_status_entry:3}"
+          isolate_path="${isolate_path# }"
+          if ! printf '%s\n' "$ISOLATE_ALLOWLIST" | grep -Fxq -- "$isolate_path"; then
+            ISOLATE_UNEXPECTED_DIRTY="$ISOLATE_UNEXPECTED_DIRTY"$'\n'"  $isolate_status_entry"
+          fi
+        done
+        if [ -n "$ISOLATE_UNEXPECTED_DIRTY" ]; then
+          fail "--isolate: re-entry сессии $SESSION_ID — грязные пути вне allowlist этой сессии:$ISOLATE_UNEXPECTED_DIRTY" 1
+        fi
+      else
+        ISOLATE_BASE_REAL="$(realpath "$ISOLATE_BASE_DIR" 2>/dev/null || echo "$ISOLATE_BASE_DIR")"
+        ISOLATE_ON_FROZEN_PATH=0
+        for isolate_frozen_path in "${FROZEN_CANONICAL_PATHS[@]+"${FROZEN_CANONICAL_PATHS[@]}"}"; do
+          if [ "$ISOLATE_BASE_REAL" = "$(realpath "$isolate_frozen_path" 2>/dev/null || echo "$isolate_frozen_path")" ]; then
+            ISOLATE_ON_FROZEN_PATH=1
+            break
+          fi
+        done
+        if [ "$ISOLATE_ON_FROZEN_PATH" -eq 0 ]; then
+          fail "--isolate: в ($ISOLATE_BASE_DIR) есть незакоммиченные изменения — это уже не канон под freeze; закоммить/застэшь до вложенного isolate" 1
+        fi
+        echo "⚠️  --isolate: канонический чекаут грязный (${#ISOLATE_DIRTY_ENTRIES[@]} путей) — new worktree не унаследует их (ожидаемо)." >&2
+      fi
+    fi
+
+    _fmt_isolate_create() {
+      if [ -d "$ISOLATED_WORKTREE_PATH" ]; then
+        if [ "$ISOLATE_SEM_EXISTS" != "1" ]; then
+          fail "COLLISION_RETRY: --isolate: worktree $ISOLATED_WORKTREE_PATH есть, семафора нет — fail closed" 1
+        fi
+        wt_path_real=$(realpath "$ISOLATED_WORKTREE_PATH" 2>/dev/null || echo "$ISOLATED_WORKTREE_PATH")
+        registered_branch=$(git -C "$ISOLATE_BASE_DIR" worktree list --porcelain \
+          | awk -v p="$wt_path_real" '$1=="worktree" && $2==p {found=1} found && /^branch / {print $2; exit}')
+        registered_branch="${registered_branch#refs/heads/}"
+        if [ "$registered_branch" != "$ISOLATED_WORKTREE_BRANCH" ]; then
+          fail "--isolate: путь $ISOLATED_WORKTREE_PATH привязан к '$registered_branch', ожидалась '$ISOLATED_WORKTREE_BRANCH'" 1
+        fi
+        return 0
+      fi
+      if [ -z "${BASE_SHA:-}" ]; then
+        local fetch_error fetch_reason fetch_rc local_sha offline_command
+        local offline_args
+        if fetch_error=$(LC_ALL=C GIT_TERMINAL_PROMPT=0 git -C "$ISOLATE_BASE_DIR" fetch origin main 2>&1); then
+          :
+        else
+          fetch_rc=$?
+          # Git may echo credentials embedded in a remote URL. Report only a
+          # classified cause; the pilot can inspect the raw error locally.
+          case "$fetch_error" in
+            *"Could not resolve host"*|*"Name or service not known"*) fetch_reason="имя сервера не разрешается" ;;
+            *"Failed to connect"*|*"Connection refused"*|*"Network is unreachable"*|*"Could not connect"*) fetch_reason="нет соединения с origin" ;;
+            *"Authentication failed"*|*"Permission denied (publickey)"*|*"could not read Username"*) fetch_reason="ошибка авторизации origin" ;;
+            *"couldn't find remote ref main"*) fetch_reason="на origin нет ветки main" ;;
+            *) fetch_reason="причина не классифицирована; проверь git fetch origin main локально" ;;
+          esac
+          echo "session-guard: --isolate: origin/main недоступен: $fetch_reason (git fetch, код $fetch_rc)." >&2
+          local_sha=$(git -C "$ISOLATE_BASE_DIR" rev-parse --verify 'HEAD^{commit}' 2>/dev/null || true)
+          if [ -n "$local_sha" ]; then
+            printf 'session-guard: Проверь локальную ревизию: git -C %q show -s --format=%%H\\ %%s %q\n' "$ISOLATE_BASE_DIR" "$local_sha" >&2
+            offline_args=(bash "$SESSION_GUARD_SELF" open --isolate --wp "$WP" --task "$TASK" --slug "$SLUG" --agent "$AGENT" --base-sha "$local_sha")
+            [ -n "$SESSION_ID_ARG" ] && offline_args+=(--session-id "$SESSION_ID_ARG")
+            printf -v offline_command '%q ' "${offline_args[@]}"
+            printf 'session-guard: Офлайн после проверки ревизии: (cd -- %q && %s)\n' "$ISOLATE_BASE_DIR" "$offline_command" >&2
+          fi
+          return 1
+        fi
+        git -C "$ISOLATE_BASE_DIR" worktree add -b "$ISOLATED_WORKTREE_BRANCH" "$ISOLATED_WORKTREE_PATH" origin/main \
+          || fail "--isolate: git worktree add не удался" 1
+      else
+        # An explicit local commit is the offline path: no remote query here.
+        GIT_NO_LAZY_FETCH=1 git -C "$ISOLATE_BASE_DIR" worktree add -b "$ISOLATED_WORKTREE_BRANCH" "$ISOLATED_WORKTREE_PATH" "$BASE_SHA" \
+          || fail "--isolate: git worktree add от --base-sha не удался" 1
+      fi
+      real=$(realpath "$ISOLATED_WORKTREE_PATH" 2>/dev/null || echo "$ISOLATED_WORKTREE_PATH")
+      case "$real" in
+        "$ISOLATE_STORE_DIR_REAL"/*) : ;;
+        *)
+          git -C "$ISOLATE_BASE_DIR" worktree remove --force "$ISOLATED_WORKTREE_PATH" 2>/dev/null || rm -rf "$ISOLATED_WORKTREE_PATH"
+          fail "--isolate: worktree вне store — удалён" 1
+          ;;
+      esac
+    }
+    with_isolate_lock "$SESSION_ID" _fmt_isolate_create
+    ISOLATED_WORKTREE_PATH=$(realpath "$ISOLATED_WORKTREE_PATH" 2>/dev/null) \
+      || fail "--isolate: не удалось канонизировать путь worktree" 1
+  fi
+
+  if [ "${ISOLATE_FLAG:-0}" = "1" ] && [ -f "$SEM_FILE" ]; then
+    echo "Session OPEN (re-entry): $SEM_FILE (WP: $WP, agent: $AGENT, slug: ${SLUG:-$WP})"
+    printf '{"worktree_path": "%s", "branch": "%s", "session_id": "%s"}\n' \
+      "$ISOLATED_WORKTREE_PATH" "$ISOLATED_WORKTREE_BRANCH" "$SESSION_ID"
+    echo "⚠️  cd \"$ISOLATED_WORKTREE_PATH\" перед следующим действием -- рабочий каталог не переключается автоматически." >&2
+    exit 0
+  fi
+
   SEM_TMP=$(mktemp "$SESSION_DIR/.session-open.XXXXXX")
   chmod 600 "$SEM_TMP"
   {
@@ -1299,22 +1697,17 @@ if [ "$CMD" = "open" ]; then
     echo "session_id: $SESSION_ID"
     [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && echo "harness_session_id: $CLAUDE_CODE_SESSION_ID"
     echo "close_path: ${CLOSE_PATH:-unknown}"
-    # WP-484 (15.09, peer-session 2026-09-15-06, Claude+Kimi; same class as
-    # the harness_session_id/close_path point-patch above, 25.08,
-    # bug-2026-08-25-fmt-session-guard-stale-missing-close-path-fields.md):
-    # this FMT copy has no --isolate concept at all (no gov_repo_dir(), no
-    # CURRENT_REPO_DIR) -- it can only ever mean the plain canonical
-    # checkout, the same $IWE_ROOT/$GOV_REPO formula the root copy's own
-    # legacy-semaphore fallback already computes independently. Without this
-    # line, semaphore_governance_worktree() in the root copy (the only
-    # reader -- this field is not consumed anywhere in this file) finds no
-    # governance_worktree/isolated_worktree/orz_sessions_dir at all and
-    # falls into the strict whole-HEAD ancestry check on `close`, which is a
-    # false negative whenever the canonical checkout has diverged from
-    # origin/main (routine under parallel sessions). session-guard.sh itself
-    # is NOT resynced from root by template-sync.sh (TEMPLATE_OWNED_SCRIPTS,
-    # WP-546) -- this is a deliberate point-patch, not partial resync.
-    echo "governance_worktree: $IWE_ROOT/$GOV_REPO"
+    # WP-484 point-patch + WP-485 Ф14: without isolate, governance_worktree is
+    # the canonical $IWE_ROOT/$GOV_REPO (helps root readers on close). With
+    # --isolate, fields above already point at the isolated worktree.
+    if [ "${ISOLATE_FLAG:-0}" = "1" ] && [ -n "${ISOLATED_WORKTREE_PATH:-}" ]; then
+      echo "governance_worktree: $ISOLATED_WORKTREE_PATH"
+      echo "isolated_worktree: $ISOLATED_WORKTREE_PATH"
+      echo "isolated_branch: $ISOLATED_WORKTREE_BRANCH"
+    else
+      echo "governance_worktree: $IWE_ROOT/$GOV_REPO"
+    fi
+    echo "orz_sessions_dir: $ORZ_DIR"
     echo "orz_file: $ORZ_BASENAME"
     # WP-484 (08.08, Kimi diagnosis + pilot report): regular sessions never
     # recorded a pid at all, so sweep_orphaned_semaphores()'s dead-pid check —
@@ -1350,6 +1743,14 @@ if [ "$CMD" = "open" ]; then
     # $ORZ_DIR's PARENT (governance-repo root — sessions/<...>), same convention
     # every other `file:` line already uses.
     echo "file: $(basename "$ORZ_DIR")/$ORZ_BASENAME"
+    # WP-485 Ф14: open appends OPEN_LOG under governance inbox — register for re-entry allowlist
+    if [ -n "${OPEN_LOG:-}" ]; then
+      case "$OPEN_LOG" in
+        "$IWE_ROOT/$GOV_REPO"/*)
+          echo "file: ${OPEN_LOG#"$IWE_ROOT/$GOV_REPO/"}"
+          ;;
+      esac
+    fi
   } > "$SEM_TMP"
   _publish_open_no_clobber "$SEM_TMP" "$SEM_FILE" \
     || { rm -f "$SEM_TMP"; fail "open: exact session_id '$SESSION_ID' появился параллельно; существующий файл не изменён" 1; }
@@ -1395,6 +1796,11 @@ EOF
       "$AGENT" working "${WP}: ${TASK:-standalone}" "${FILES:-}" 2>/dev/null || true
   fi
   echo "Session OPEN: $SEM_FILE (WP: $WP, agent: $AGENT, slug: ${SLUG:-$WP})"
+  if [ "${ISOLATE_FLAG:-0}" = "1" ] && [ -n "${ISOLATED_WORKTREE_PATH:-}" ]; then
+    printf '{"worktree_path": "%s", "branch": "%s", "session_id": "%s"}\n' \
+      "$ISOLATED_WORKTREE_PATH" "$ISOLATED_WORKTREE_BRANCH" "$SESSION_ID"
+    echo "⚠️  cd \"$ISOLATED_WORKTREE_PATH\" перед следующим действием -- рабочий каталог не переключается автоматически." >&2
+  fi
   exit 0
 fi
 
@@ -1791,6 +2197,22 @@ print(json.dumps({"wp": sys.argv[1], "slug": sys.argv[2], "agent": sys.argv[3], 
     || fail "close: не удалось подготовить durable receipt; open сохранён" 1
   [ -n "$CLOSE_ATTEMPT" ] \
     || fail "close: durable receipt не вернул attempt id; open сохранён" 1
+
+  # WP-485 Ф14: happy-path isolate publish (full isolate-push/v2 journal deferred)
+  ISOLATE_WT=$(grep "^isolated_worktree: " "$SEM_FILE" 2>/dev/null | head -1 | cut -d" " -f2- || true)
+  if [ -n "$ISOLATE_WT" ] && [ -d "$ISOLATE_WT" ]; then
+    if PUSH_BIN=$(resolve_isolate_push_script); then
+      echo "session-guard: close: isolate-push через $PUSH_BIN" >&2
+      if ! bash "$PUSH_BIN" "$ISOLATE_WT" main; then
+        echo "⚠️  isolate-push не завершился успешно — worktree оставлен: $ISOLATE_WT" >&2
+      else
+        git -C "$(git -C "$ISOLATE_WT" rev-parse --git-common-dir 2>/dev/null | sed "s|/.git$||;s|/$||" || true)" worktree remove --force "$ISOLATE_WT" 2>/dev/null           || git worktree remove --force "$ISOLATE_WT" 2>/dev/null           || echo "⚠️  не удалось удалить isolate worktree $ISOLATE_WT" >&2
+      fi
+    else
+      echo "⚠️  isolate-push.sh не найден ($GOV_REPO/scripts или $IWE_ROOT/scripts) — worktree оставлен: $ISOLATE_WT" >&2
+    fi
+  fi
+
   _terminal_close_no_clobber "$SEM_FILE" "$AGENT" "$SESSION_ID" "$CLOSE_ATTEMPT" \
     || fail "close: terminal destination занят другим inode; open не удалён" 1
   _sem_read="$SEM_FILE.closed"
@@ -2407,4 +2829,59 @@ EOF
   exit 0
 fi
 
-fail "Unknown command: $CMD (use: open, close, audit, renew, heartbeat, note-file, recover-orphaned, pre-commit-check)"
+
+# --- FREEZE-CANONICAL (WP-485 Ф14 / WP-520) ---
+if [ "$CMD" = "freeze-canonical" ]; then
+  FREEZE_PATH="${POSITIONAL[0]:-}"
+  [ -z "$FREEZE_PATH" ] && fail "freeze-canonical: missing path argument" 1
+  [ -d "$FREEZE_PATH" ] || fail "freeze-canonical: '$FREEZE_PATH' is not a directory" 1
+  if [ -L "$FREEZE_PATH" ]; then
+    fail "freeze-canonical: '$FREEZE_PATH' is a symlink — pass the resolved path" 1
+  fi
+  if [ "${FORCE_FLAG:-0}" != "1" ]; then
+    LIVE=$(list_candidates "${AGENT:-${IWE_AGENT:-claude-code}}")
+    if [ -n "$LIVE" ]; then
+      echo "session-guard: freeze-canonical: agent has open semaphore(s) — close them first or pass --force:" >&2
+      echo "$LIVE" >&2
+      exit 1
+    fi
+  fi
+  chflags -R uchg "$FREEZE_PATH" \
+    || fail "freeze-canonical: chflags -R uchg failed on '$FREEZE_PATH'" 1
+  echo "Frozen (chflags -R uchg): $FREEZE_PATH"
+  exit 0
+fi
+
+if [ "$CMD" = "unfreeze-canonical" ]; then
+  FREEZE_PATH="${POSITIONAL[0]:-}"
+  [ -z "$FREEZE_PATH" ] && fail "unfreeze-canonical: missing path argument" 1
+  fail "unfreeze-canonical больше не снимает chflags сама — пилот вручную: 'chflags -R nouchg $FREEZE_PATH'. Агент: request-unfreeze-canonical --reason \"...\"" 1
+fi
+
+if [ "$CMD" = "request-unfreeze-canonical" ]; then
+  FREEZE_PATH="${POSITIONAL[0]:-}"
+  [ -z "$FREEZE_PATH" ] && fail "request-unfreeze-canonical: missing path argument" 1
+  [ -z "${UNFREEZE_REASON:-}" ] && fail "request-unfreeze-canonical: --reason обязателен" 1
+  UNFREEZE_LOG="$IWE_ROOT/.iwe-runtime/unfreeze-requests.log"
+  mkdir -p "$(dirname "$UNFREEZE_LOG")"
+  NONCE=$(date +%s%N 2>/dev/null || date +%s)-$$
+  {
+    echo "---"
+    echo "requested_at: $(now_iso)"
+    echo "path: $FREEZE_PATH"
+    echo "reason: $UNFREEZE_REASON"
+    echo "agent: ${AGENT:-${IWE_AGENT:-unknown}}"
+    echo "nonce: $NONCE"
+    echo "---"
+  } >> "$UNFREEZE_LOG"
+  echo "Запрос на разморозку зарегистрирован (nonce: $NONCE)."
+  echo "Причина: $UNFREEZE_REASON"
+  echo ""
+  echo "Разморозка — только вручную пилотом:"
+  echo "  chflags -R nouchg $FREEZE_PATH"
+  echo ""
+  echo "Эта команда ничего не разморозила — только записала запрос в $UNFREEZE_LOG."
+  exit 0
+fi
+
+fail "Unknown command: $CMD (use: open, close, audit, renew, heartbeat, note-file, recover-orphaned, pre-commit-check, freeze-canonical, unfreeze-canonical, request-unfreeze-canonical)"

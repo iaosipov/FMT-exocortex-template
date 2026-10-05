@@ -45,6 +45,39 @@ SMOKE_GOVERNANCE_REPO="${SMOKE_GOVERNANCE_REPO:-DS-strategy}"
 SMOKE_CLEAN_PATH="/usr/bin:/bin"
 [ -d /run/current-system/sw/bin ] && SMOKE_CLEAN_PATH="$SMOKE_CLEAN_PATH:/run/current-system/sw/bin"
 
+# boundary-guard.sh owns a private deny prefix for service-manager calls. Keep
+# it first when this smoke deliberately resets PATH (including its env -i
+# subprocesses); otherwise the smoke could reach the host manager directly.
+if [ -n "${IWE_REDTEAM_SERVICE_BIN:-}" ]; then
+    case "$IWE_REDTEAM_SERVICE_BIN" in
+        "${IWE_REDTEAM_FIXTURE_ROOT:-}/.iwe-redteam-service-bin."*) ;;
+        *) echo "ERROR: invalid Red Team service-manager deny prefix" >&2; exit 1 ;;
+    esac
+    [ -d "$IWE_REDTEAM_SERVICE_BIN" ] || {
+        echo "ERROR: Red Team service-manager deny prefix missing" >&2
+        exit 1
+    }
+    # The smoke normally chooses a sibling /tmp directory. Under the guard,
+    # keep all generated installation files inside the declared fixture.
+    TEST_WS="$IWE_REDTEAM_FIXTURE_ROOT/smoke-$$"
+    SMOKE_CLEAN_PATH="$IWE_REDTEAM_SERVICE_BIN:$SMOKE_CLEAN_PATH"
+    for manager in launchctl systemctl crontab; do
+        resolved=$(PATH="$SMOKE_CLEAN_PATH" command -v "$manager" 2>/dev/null || true)
+        case "$resolved" in
+            ""|"$IWE_REDTEAM_SERVICE_BIN/$manager") ;;
+            *) echo "ERROR: smoke PATH bypasses the $manager deny shim" >&2; exit 1 ;;
+        esac
+    done
+fi
+
+# Calibration probes this exact PATH construction without running setup. A
+# nonzero status prevents a path-only probe from being mistaken for smoke PASS.
+if [ "${SMOKE_GUARD_PATH_PROBE:-}" = "1" ]; then
+    printf 'SMOKE_GUARDED_PATH=%s\n' "$SMOKE_CLEAN_PATH"
+    printf 'SMOKE_GUARDED_WORKSPACE=%s\n' "$TEST_WS"
+    exit 77
+fi
+
 # E2E sections replace HOME so setup cannot touch the caller's real dotfiles.
 # On macOS CI, PyYAML can live in the original HOME's user-site; changing HOME
 # would otherwise make the already-verified dependency disappear mid-test and
@@ -102,7 +135,7 @@ WORKSPACE_DIR=$TEST_WS
 CLAUDE_PATH=/usr/local/bin/claude
 CLAUDE_PROJECT_SLUG=smoke-test
 TIMEZONE_HOUR=4
-TIMEZONE_DESC=4:00 UTC
+TIMEZONE_DESC="4:00 UTC"
 HOME_DIR=$TEST_WS
 USER_NAME=smoke-test
 GOVERNANCE_REPO=$SMOKE_GOVERNANCE_REPO
@@ -179,7 +212,7 @@ WORKSPACE_DIR=$TEST_WS
 CLAUDE_PATH=/usr/local/bin/claude
 CLAUDE_PROJECT_SLUG=smoke-test
 TIMEZONE_HOUR=4
-TIMEZONE_DESC=4:00 UTC
+TIMEZONE_DESC="4:00 UTC"
 HOME_DIR=$TEST_WS
 USER_NAME=smoke-test
 GOVERNANCE_REPO=DS-pilot-strategy
@@ -321,7 +354,7 @@ echo "[6/7] install.sh с env проходит fail-fast (positive case)..."
 # WP-293: HOME isolation обязателен — install.sh пишет plist в $HOME/Library/LaunchAgents
 # и делает launchctl load. Без env -i HOME=$TEST_WS test перезатрёт реальный launchd автора.
 INSTALL_OK_OUT=$(env -i HOME="$TEST_WS" PATH="$SMOKE_CLEAN_PATH" \
-    IWE_RUNTIME="$TEST_WS/.iwe-runtime" IWE_WORKSPACE="$TEST_WS" \
+    IWE_RUNTIME="$TEST_WS/.iwe-runtime" IWE_WORKSPACE="$TEST_WS" SETUP_CI=1 \
     bash "$TEMPLATE_DIR/roles/strategist/install.sh" 2>&1 || true)
 if echo "$INSTALL_OK_OUT" | grep -qE 'содержит незаменённые плейсхолдеры'; then
     fail "install.sh даёт fail-fast С env (не должен): $INSTALL_OK_OUT"
@@ -524,6 +557,15 @@ if [ "$RERUN_FIRST_RC" -eq 0 ] && [ "$RERUN_SECOND_RC" -eq 0 ] && \
 else
     fail "e2e rerun: rc=$RERUN_FIRST_RC/$RERUN_SECOND_RC or DS-strategy escaped from configured governance"
 fi
+RERUN_NAV="$RERUN_HOME/.claude/projects/$(echo "$RERUN_WS" | tr '/' '-')/memory/navigation.md"
+if [ -f "$RERUN_NAV" ] && \
+   grep -Fq '{{GOVERNANCE_REPO}}/docs/Strategy.md' "$RERUN_NAV" && \
+   grep -Fq '.exocortex.env' "$RERUN_NAV" && \
+   ! grep -Fq 'DS-strategy/' "$RERUN_NAV"; then
+    pass "e2e rerun: installed navigation keeps the explained governance marker, not the default path"
+else
+    fail "e2e rerun: installed navigation is missing, lacks the marker, or still names the default path"
+fi
 rm -rf "$RERUN_WS" 2>/dev/null || true
 
 # === Test 9c: governance-root symlink is rejected before external writes ===
@@ -537,6 +579,8 @@ ln -s "$SYMLINK_OUTSIDE" "$SYMLINK_WS/custom-governance"
 SYMLINK_RC=0
 SYMLINK_OUT=$(HOME="$SYMLINK_HOME" PATH="$SMOKE_CLEAN_PATH" SETUP_CI=1 GITHUB_USER=smoke-symlink \
     WORKSPACE_DIR="$SYMLINK_WS" GOVERNANCE_REPO=custom-governance \
+    GIT_AUTHOR_NAME="smoke-symlink" GIT_AUTHOR_EMAIL="smoke@test.local" \
+    GIT_COMMITTER_NAME="smoke-symlink" GIT_COMMITTER_EMAIL="smoke@test.local" \
     bash "$TEMPLATE_DIR/setup.sh" --core 2>&1) || SYMLINK_RC=$?
 SYMLINK_FILE_COUNT=$(find "$SYMLINK_OUTSIDE" -type f | wc -l | tr -d ' ')
 if [ "$SYMLINK_RC" -ne 0 ] && \

@@ -27,9 +27,9 @@ if [ -z "$SECRET_BYPASS_JQ" ]; then
   SECRET_BYPASS_JQ="$(command -v jq 2>/dev/null || true)"
 fi
 # WP-92: Windows installs ship jq as <workspace>/bin/jq.exe, and hook
-# environments (VS Code, launchd-style minimal PATH) often lack that dir —
-# the scanner then fails closed on every commit. The library lives at
-# <workspace>/.claude/hooks/, so the workspace bin is two levels up.
+# environments (minimal PATH) often lack that dir — the scanner then fails
+# closed on every commit. The library lives at <workspace>/.claude/hooks/,
+# so the workspace bin is two levels up.
 if [ -z "$SECRET_BYPASS_JQ" ]; then
   secret_bypass_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
   for secret_bypass_candidate in "$secret_bypass_lib_dir/../../bin/jq.exe" "$secret_bypass_lib_dir/../../bin/jq"; do

@@ -17,13 +17,19 @@
 
 set -euo pipefail
 
-IWE_DIR="${IWE_DIR:-$HOME/IWE}"
+IWE_DIR="${IWE_DIR:-${IWE_ROOT:-${IWE_WORKSPACE:-$HOME/IWE}}}"
 IWE_TEMPLATE="${IWE_TEMPLATE:-$IWE_DIR/FMT-exocortex-template}"
 GOV_REPO="${IWE_GOVERNANCE_REPO:-DS-strategy}"
 CATALOG="${IWE_EXECUTOR_CATALOG:-${IWE_DIR}/${GOV_REPO}/scripts/executor-catalog.yaml}"
 AUDIT_LOG="${IWE_ROUTER_AUDIT:-${IWE_DIR}/${GOV_REPO}/logs/routing-path-distribution.tsv}"
 ERROR_LOG="${IWE_ROUTER_ERRORS:-${IWE_DIR}/${GOV_REPO}/logs/routing-errors.log}"
 JSON_MODE="false"
+# issue #889: a bare `python3` only sees PATH's own interpreter, which on
+# hosts with a pyenv shim ahead of a real PyYAML-carrying python3 fails the
+# catalog lookup before the executor-substitution check ever runs. Resolve
+# once via the shared F6 resolver (scripts/lib/find-python3.sh, #453/#463)
+# and reuse for every python3 call below — same pattern as day-close.sh.
+RESOLVED_PYTHON3=""
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,11 +48,14 @@ die() {
 warn() { echo "WARN: $*" >&2; }
 
 require_python() {
-    if ! command -v python3 &>/dev/null; then
-        die "python3 not found — required for catalog lookup" 1
-    fi
-    if ! python3 -c "import yaml" &>/dev/null; then
-        die "PyYAML not found — required for catalog lookup (pip install pyyaml)" 1
+    [[ -n "$RESOLVED_PYTHON3" ]] && return 0
+    # Resolved next to this script (same install unit as route-task.sh
+    # itself, day-close.sh precedent) — not via $IWE_TEMPLATE/$IWE_DIR,
+    # which a caller may not have set to where the sibling lib/ actually is.
+    local resolver
+    resolver="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/find-python3.sh"
+    if ! RESOLVED_PYTHON3=$("$resolver" 2>/dev/null); then
+        die "$("$resolver" 2>&1 >/dev/null)" 1
     fi
 }
 
@@ -107,7 +116,7 @@ lookup_skill() {
     local skill_name="$1"
     require_python
     require_catalog
-    python3 - "$CATALOG" "$skill_name" << 'PYEOF'
+    "$RESOLVED_PYTHON3" - "$CATALOG" "$skill_name" << 'PYEOF'
 import sys, yaml
 
 catalog_path, skill_name = sys.argv[1], sys.argv[2]
@@ -127,6 +136,8 @@ for entry in cat.get("entries", []):
         print(f"deterministic={'true' if r.get('deterministic') else 'false'}")
         if "script_path" in r:
             print(f"script_path={r['script_path']}")
+        if "script_root" in r:
+            print(f"script_root={r['script_root']}")
         if "model" in r:
             print(f"model={r['model']}")
         if "optimization_priority" in r:
@@ -163,18 +174,53 @@ _resolve_interpreter() {
     fi
 }
 
+_resolve_workspace_script() {
+    "$RESOLVED_PYTHON3" - "$IWE_DIR" "$1" << 'PYEOF'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1]).expanduser().resolve()
+relative = Path(sys.argv[2])
+if relative.is_absolute() or not relative.parts or relative.parts[0] != "scripts" or ".." in relative.parts:
+    sys.exit(2)
+try:
+    target = (root / relative).resolve(strict=True)
+    target.relative_to(root)
+except (OSError, ValueError):
+    sys.exit(2)
+if not target.is_file():
+    sys.exit(2)
+print(target)
+PYEOF
+}
+
 run_script() {
     local skill_name="$1"
     local script_path="$2"
     local args="${3:-}"
     local allow_fallback="${4:-true}"
     local routing_path="${5:-$skill_name → script}"
+    local script_root="${6:-template}"
 
-    # executor-catalog.yaml is generated from template SKILL.md frontmatter,
-    # so relative script_path is relative to the template root, not the
-    # workspace root (issue #634).
-    if [[ "$script_path" != /* ]]; then
-        script_path="$IWE_TEMPLATE/$script_path"
+    if [[ "$script_root" == "workspace" ]]; then
+        local resolved_path
+        if ! resolved_path=$(_resolve_workspace_script "$script_path"); then
+            warn "invalid workspace script path: $script_path (skill=$skill_name)"
+            emit_error "$skill_name" "EXEC_FAILED" "workspace script path rejected: $script_path"
+            emit_result "$skill_name" "script" "EXEC_FAILED" "$routing_path"
+            exit 2
+        fi
+        script_path="$resolved_path"
+    elif [[ "$script_root" == "template" ]]; then
+        # Existing catalog entries continue to resolve from the template.
+        if [[ "$script_path" != /* ]]; then
+            script_path="$IWE_TEMPLATE/$script_path"
+        fi
+    else
+        warn "unknown script_root: $script_root (skill=$skill_name)"
+        emit_error "$skill_name" "EXEC_FAILED" "unknown script_root: $script_root"
+        emit_result "$skill_name" "script" "EXEC_FAILED" "$routing_path"
+        exit 2
     fi
 
     if [[ ! -f "$script_path" ]]; then
@@ -221,7 +267,7 @@ run_script() {
         # command substitution. `while read -d ''` — bash3.2-совместимо.
         local ARGS_ARRAY=() shlex_tmp shlex_err
         shlex_tmp=$(mktemp "${TMPDIR:-/tmp}/route-task-args.XXXXXX") || die "mktemp failed"
-        if ! shlex_err=$(python3 -c '
+        if ! shlex_err=$("$RESOLVED_PYTHON3" -c '
 import shlex, sys
 try:
     toks = shlex.split(sys.argv[1])
@@ -337,9 +383,10 @@ dispatch_skill() {
         die "catalog lookup failed (exit=$lookup_exit)"
     fi
 
-    local executor script_path="" model="" deterministic=""
+    local executor script_path="" script_root="template" model="" deterministic=""
     executor=$(echo "$lookup_result" | grep "^executor=" | cut -d= -f2)
     script_path=$(echo "$lookup_result" | grep "^script_path=" | cut -d= -f2- || true)
+    script_root=$(echo "$lookup_result" | grep "^script_root=" | cut -d= -f2- || echo template)
     model=$(echo "$lookup_result" | grep "^model=" | cut -d= -f2- || true)
     deterministic=$(echo "$lookup_result" | grep "^deterministic=" | cut -d= -f2- || true)
     routing_path="${routing_path}${executor}"
@@ -355,7 +402,7 @@ dispatch_skill() {
 
     case "$executor" in
         script)
-            run_script "$skill_name" "$script_path" "$args" "$allow_fallback" "$routing_path"
+            run_script "$skill_name" "$script_path" "$args" "$allow_fallback" "$routing_path" "$script_root"
             ;;
         haiku)
             run_haiku "$skill_name" "$args"
@@ -421,7 +468,7 @@ dispatch_skill() {
 show_list() {
     require_python
     require_catalog
-    python3 - "$CATALOG" << 'PYEOF'
+    "$RESOLVED_PYTHON3" - "$CATALOG" << 'PYEOF'
 import sys, yaml
 
 with open(sys.argv[1]) as f:
@@ -449,7 +496,7 @@ PYEOF
 validate_catalog() {
     require_python
     require_catalog
-    python3 - "$CATALOG" << 'PYEOF'
+    "$RESOLVED_PYTHON3" - "$CATALOG" << 'PYEOF'
 import sys, yaml
 
 VALID = {"script", "haiku", "sonnet", "opus", "mcp-direct", "agent", "script+judgment"}
@@ -468,6 +515,10 @@ for e in cat["entries"]:
         errors.append(f"{name}: missing deterministic")
     if r.get("executor") == "script" and "script_path" not in r:
         errors.append(f"{name}: script executor missing script_path")
+    if r.get("script_root", "template") not in {"template", "workspace"}:
+        errors.append(f"{name}: invalid script_root")
+    if "script_root" in r and r.get("executor") != "script":
+        errors.append(f"{name}: script_root requires script executor")
     if r.get("executor") == "agent" and r.get("model") not in VALID_AGENT_MODELS:
         errors.append(f"{name}: agent executor requires model: haiku|sonnet|opus")
 
@@ -503,6 +554,14 @@ main() {
             *)          die "unknown option: $1" ;;
         esac
     done
+
+    # Resolve python3 here, in the main shell, before any mode below can
+    # reach it through a `$(...)` subshell (dispatch_skill -> lookup_skill,
+    # line ~333) — a subshell inherits the parent's variables at fork time
+    # but can never write RESOLVED_PYTHON3 back, so resolving lazily inside
+    # lookup_skill() left every OTHER caller in the parent shell (run_script's
+    # shlex parser) with an empty $RESOLVED_PYTHON3.
+    [[ "$mode" == "help" ]] || require_python
 
     case "$mode" in
         list)     show_list ;;
