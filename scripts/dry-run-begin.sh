@@ -44,19 +44,31 @@ fail() { echo "dry-run-begin: $*" >&2; exit 1; }
 
 # Каталог: lstat-инварианты гейта.
 [ -L "$DRY_DIR" ] && fail "dir $DRY_DIR is a symlink — refusing"
-if [ ! -d "$DRY_DIR" ]; then
-    mkdir -m 0700 "$DRY_DIR" 2>/dev/null || fail "cannot create $DRY_DIR with 0700"
-fi
+case "$(uname)" in
+    MINGW*|MSYS*|CYGWIN*)
+        # Windows (Git Bash): chmod на /tmp молча не работает (права задаёт
+        # Windows ACL, не POSIX), а /tmp и так приватен для пользователя.
+        # Пермишен-инвариант неприменим — проверяем только не-symlink и
+        # владельца (ниже), иначе гейт fail-closed на каждой Windows-машине.
+        [ -d "$DRY_DIR" ] || mkdir "$DRY_DIR" 2>/dev/null || fail "cannot create $DRY_DIR"
+        ;;
+    *)
+        if [ ! -d "$DRY_DIR" ]; then
+            mkdir -m 0700 "$DRY_DIR" 2>/dev/null || fail "cannot create $DRY_DIR with 0700"
+        fi
+        ;;
+esac
 case "$(uname)" in
     Darwin) OWNER_UID=$(stat -f %u "$DRY_DIR" 2>/dev/null || true) ;;
     *)      OWNER_UID=$(stat -c %u "$DRY_DIR" 2>/dev/null || true) ;;
 esac
 [ "$OWNER_UID" = "$(id -u)" ] || fail "dir owned by uid $OWNER_UID"
 case "$(uname)" in
+    MINGW*|MSYS*|CYGWIN*) PERMS="" ;;
     Darwin) PERMS=$(stat -f %Lp "$DRY_DIR" 2>/dev/null || true) ;;
     *)      PERMS=$(stat -c %a "$DRY_DIR" 2>/dev/null || true) ;;
 esac
-[ -n "$PERMS" ] && [ $(( 8#$PERMS & 077 )) -eq 0 ] || fail "dir $DRY_DIR has group/other write permissions ($PERMS)"
+[ -z "$PERMS" ] || { [ $(( 8#$PERMS & 077 )) -eq 0 ] || fail "dir $DRY_DIR has group/other write permissions ($PERMS)"; }
 
 tries=0
 while ! mkdir "$LOCK_DIR" 2>/dev/null; do
@@ -99,10 +111,27 @@ done
 
 GID="dry-$(date +%s)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 TOKEN=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
-TOKEN_SHA=$(printf '%s' "$TOKEN" | shasum -a 256 | awk '{print $1}')
+# sha256sum есть в Git Bash и Linux, shasum — на macOS; openssl — последний
+# резерв. Тот же порядок обязан быть в dry-run-complete.sh (verify парность).
+if command -v sha256sum >/dev/null 2>&1; then
+    TOKEN_SHA=$(printf '%s' "$TOKEN" | sha256sum | awk '{print $1}')
+elif command -v shasum >/dev/null 2>&1; then
+    TOKEN_SHA=$(printf '%s' "$TOKEN" | shasum -a 256 | awk '{print $1}')
+else
+    TOKEN_SHA=$(printf '%s' "$TOKEN" | openssl dgst -sha256 | awk '{print $NF}')
+fi
 OWNER_PID=$PPID
 OWNER_PID_START=$(ps -o lstart= -p "$OWNER_PID" 2>/dev/null || true)
 OWNER_PGID=$(ps -o pgid= -p "$OWNER_PID" 2>/dev/null | tr -d ' ')
+case "$(uname)" in
+    MINGW*|MSYS*|CYGWIN*)
+        # ps в Git Bash не поддерживает -o — process-доказательства (lstart,
+        # pgid) недоступны. Деградация: маркер-значение, детект сиротства
+        # отдаётся TTL в гейте (аналог Windows-режима day-close backup).
+        [ -n "$OWNER_PID_START" ] || OWNER_PID_START="windows-na"
+        case "$OWNER_PGID" in ''|*[!0-9]*|0) OWNER_PGID=$OWNER_PID ;; esac
+        ;;
+esac
 case "$OWNER_PID" in ''|*[!0-9]*) fail "cannot determine owner pid" ;; esac
 case "$OWNER_PGID" in ''|*[!0-9]*|0) fail "cannot determine owner pgid (got '$OWNER_PGID')" ;; esac
 [ -n "$OWNER_PID_START" ] || fail "cannot determine owner pid start"

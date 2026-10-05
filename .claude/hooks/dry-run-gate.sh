@@ -70,7 +70,17 @@ dry_dir_ensure() {
         fail_closed "dry-run dir $DRY_DIR is a symlink — refusing (possible attack)"
     fi
     if [ ! -d "$DRY_DIR" ]; then
-        mkdir -m 0700 "$DRY_DIR" 2>/dev/null || fail_closed "cannot create $DRY_DIR with 0700"
+        case "$(uname)" in
+            MINGW*|MSYS*|CYGWIN*)
+                # Windows (Git Bash): chmod на /tmp не работает (права задаёт
+                # Windows ACL), /tmp приватен для пользователя сам по себе —
+                # создаём без -m, пермишен-проверка ниже пропускается.
+                mkdir "$DRY_DIR" 2>/dev/null || fail_closed "cannot create $DRY_DIR"
+                ;;
+            *)
+                mkdir -m 0700 "$DRY_DIR" 2>/dev/null || fail_closed "cannot create $DRY_DIR with 0700"
+                ;;
+        esac
     fi
     local owner
     case "$(uname)" in
@@ -79,6 +89,9 @@ dry_dir_ensure() {
     esac
     [ "$owner" = "$(id -u)" ] || fail_closed "dry-run dir $DRY_DIR owned by uid $owner, expected $(id -u)"
     # group/other write запрещены (lstat-форма без следования symlink — каталог уже проверен выше)
+    case "$(uname)" in
+        MINGW*|MSYS*|CYGWIN*) return 0 ;;  # Windows: POSIX-пермишены неприменимы, выше
+    esac
     local perms
     case "$(uname)" in
         Darwin) perms=$(stat -f %Lp "$DRY_DIR" 2>/dev/null) ;;

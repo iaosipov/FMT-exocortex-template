@@ -53,10 +53,11 @@ case "$(uname)" in
 esac
 [ "$OWNER_UID" = "$(id -u)" ] || fail "dir $DRY_DIR owned by uid $OWNER_UID"
 case "$(uname)" in
+    MINGW*|MSYS*|CYGWIN*) PERMS="" ;;  # Windows: POSIX-пермишены на /tmp неприменимы (ACL), см. dry-run-begin.sh
     Darwin) PERMS=$(stat -f %Lp "$DRY_DIR" 2>/dev/null || true) ;;
     *)      PERMS=$(stat -c %a "$DRY_DIR" 2>/dev/null || true) ;;
 esac
-[ -n "$PERMS" ] && [ $(( 8#$PERMS & 077 )) -eq 0 ] || fail "dir $DRY_DIR has group/other write permissions ($PERMS)"
+[ -z "$PERMS" ] || { [ $(( 8#$PERMS & 077 )) -eq 0 ] || fail "dir $DRY_DIR has group/other write permissions ($PERMS)"; }
 
 tries=0
 while ! mkdir "$LOCK_DIR" 2>/dev/null; do
@@ -107,7 +108,13 @@ case "$CURRENT" in
         # с живым подтверждением пилота с терминала).
         recorded_sha=$(jq -r '.owner_token_sha256 // empty' "$SP" 2>/dev/null || true)
         if [ -n "$TOKEN" ] && [ -n "$recorded_sha" ]; then
-            given_sha=$(printf '%s' "$TOKEN" | shasum -a 256 | awk '{print $1}')
+            if command -v sha256sum >/dev/null 2>&1; then
+                given_sha=$(printf '%s' "$TOKEN" | sha256sum | awk '{print $1}')
+            elif command -v shasum >/dev/null 2>&1; then
+                given_sha=$(printf '%s' "$TOKEN" | shasum -a 256 | awk '{print $1}')
+            else
+                given_sha=$(printf '%s' "$TOKEN" | openssl dgst -sha256 | awk '{print $NF}')
+            fi
             [ "$given_sha" = "$recorded_sha" ] || fail "capability token mismatch for gate_id=$GATE_ID"
         elif [ "$REASON" = "manual-recovery" ] && [ -z "$TOKEN" ]; then
             { printf 'dry-run-complete: завершить gate_id=%s с reason=manual-recovery без capability token? [yes/N] ' "$GATE_ID"
