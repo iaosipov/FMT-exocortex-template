@@ -153,6 +153,13 @@ def build_row(num, card_path, registry_done):
 
 
 def main():
+    # Windows consoles default to cp1251: printing Cyrillic/arrow characters
+    # raises UnicodeEncodeError, and callers that capture stdout (with stderr
+    # muted) then read a truncated/empty listing as "no active WPs" (WP-92
+    # defect 13). Force UTF-8 output on every platform.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--list-cards", action="store_true", help="list all WP cards (required — the only mode for now)")
     p.add_argument("--source", choices=["inbox", "archive", "all"], default="inbox")
