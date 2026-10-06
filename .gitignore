@@ -52,3 +52,7 @@ __pycache__/
 /.iwe-runtime/*
 !/.iwe-runtime/hot-files.list
 !/.iwe-runtime/roles/
+
+# Local secrets directory (user installation; never part of the template)
+# — открыто 05.10 в Day Close как pending, закрыто 06.10 (решение пилота).
+.secrets/
